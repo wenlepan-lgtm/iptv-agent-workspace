@@ -1,0 +1,52 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.2.2 Chrome/134.0.6998.178 Electron/35.1.2 Safari/537.36" version="26.2.2">
+  <diagram name="JOCTV Agent" id="R3qZJ03CibUKsXLbDmLM">
+    <mxGraphModel dx="954" dy="790" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--13" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=default;dashed=1;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="390" y="251" width="180" height="437.5" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--1" value="麦克风阵列" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="100" y="220" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--2" value="离线 ASR" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="100" y="330" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Georgia;" edge="1" parent="1" source="YaRXu4ddzEHJzjDr-Pw--4" target="YaRXu4ddzEHJzjDr-Pw--13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--4" value="Intent Router（意图路由）" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="100" y="440" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--5" value="IPTV控制" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="410" y="390" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--6" value="酒店服务控制&lt;div&gt;（机器人、信息引导）&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="410" y="457.5" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--7" value="RCU 控制" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="410" y="540" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--8" value="云端 LLM（可选）" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="410" y="620" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--9" value="离线 TTS + 数字人" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="680" y="440" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--10" style="endArrow=block;html=1;rounded=0;fontFamily=Georgia;" edge="1" parent="1" source="YaRXu4ddzEHJzjDr-Pw--1" target="YaRXu4ddzEHJzjDr-Pw--2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--11" style="endArrow=block;html=1;rounded=0;fontFamily=Georgia;" edge="1" parent="1" source="YaRXu4ddzEHJzjDr-Pw--2" target="YaRXu4ddzEHJzjDr-Pw--4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Georgia;" edge="1" parent="1" source="YaRXu4ddzEHJzjDr-Pw--13" target="YaRXu4ddzEHJzjDr-Pw--9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="YaRXu4ddzEHJzjDr-Pw--15" value="风险拦截" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontFamily=Georgia;" vertex="1" parent="1">
+          <mxGeometry x="410" y="310" width="150" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
