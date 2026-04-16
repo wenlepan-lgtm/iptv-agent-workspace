@@ -19,8 +19,8 @@
 | 平台 | Android TV, RK3576 (ARM64), NPU |
 | 语言 | Kotlin, minSdk 29, targetSdk 34 |
 | ASR | sherpa-onnx + RKNN NPU Provider (SenseVoice) |
-| TTS | sherpa-onnx (Matcha/Piper/Kokoro) + MNN (Bert-VITS2) |
-| 数字人 | Alibaba MNN-TaoAvatar SDK (3D) + Google Filament (2D glb) |
+| TTS | sherpa-onnx (VITS MeloTTS/Piper Lessac) + MNN (Bert-VITS2, 优先) |
+| 数字人 | Alibaba MNN-TaoAvatar SDK (3D, NNR+A2BS) |
 | LLM | OpenAI 兼容 API (DeepSeek/Qwen), SSE 流式 |
 | 音频 | AudioRecord, AudioTrack, AcousticEchoCanceler, NoiseSuppressor, AGC |
 | HTTP | OkHttp 4.12 |
@@ -206,13 +206,13 @@ IDLE ──[唤醒词]──→ LISTENING ──[ASR最终结果]──→ READY
 
 | 服务 | 协议 | 用途 | 配置位置 |
 |------|------|------|---------|
-| SenseVoice RKNN | 本地 NPU | ASR 语音识别 | `/sdcard/sherpa-onnx-rk3576-...` |
-| Bert-VITS2-MNN | 本地 MNN | 中文 TTS（优先） | `/sdcard/iptv-agent-models/tts/bert-vits2-MNN/` |
-| VITS MeloTTS | 本地 ONNX | 中文 TTS（兜底） | `/sdcard/iptv-agent-models/tts/vits-melo-tts-zh_en/` |
-| Kokoro/Piper | 本地 ONNX | 英文 TTS | `/sdcard/iptv-agent-models/tts/kokoro-en-v0_19/` |
-| MNN-TaoAvatar | 本地 MNN | 3D 数字人渲染 | `/sdcard/iptv-agent-models/taoavatar/` |
+| SenseVoice RKNN | 本地 NPU (sherpa-onnx) | ASR 语音识别 | `/sdcard/sherpa-onnx-rk3576-20-seconds-sense-voice-zh-en-ja-ko-yue-2024-07-17/` |
+| Bert-VITS2-MNN | 本地 MNN (TtsService) | 中文 TTS（优先引擎） | `/sdcard/iptv-agent-models/tts/bert-vits2-MNN/` |
+| VITS MeloTTS zh_en | 本地 ONNX (sherpa-onnx) | 中文 TTS（SherpaOnnx 主引擎） | `/sdcard/iptv-agent-models/tts/vits-melo-tts-zh_en/` |
+| Piper Lessac | 本地 ONNX (sherpa-onnx) | 英文 TTS（当前默认） | `/sdcard/iptv-agent-models/tts/piper-en-us-lessac/` |
+| MNN-TaoAvatar | 本地 MNN (NNR+A2BS) | 3D 数字人渲染+口型同步 | `/sdcard/iptv-agent-models/taoavatar/` |
 | DeepSeek/Qwen LLM | HTTP SSE | 通用问答 | `config.properties` (base_url/api_key/model) |
-| 天气/新闻/汇率/股票 | HTTP | 实时数据 | 各 Provider 内硬编码 API |
+| 天气/新闻/汇率/股票 | HTTP | 实时数据 | 各 Provider 内 |
 
 ---
 
@@ -231,7 +231,7 @@ IDLE ──[唤醒词]──→ LISTENING ──[ASR最终结果]──→ READY
 1. **Activity 为中心**：无 DI 框架，`MainActivity` 手动编排所有模块。各模块通过接口回调通信。
 2. **回调驱动**：无 EventBus/LiveData，模块间通过接口回调链传递数据。
 3. **NPU 串行化**：ASR NPU 推理用 Mutex 保证同一时刻只有一个任务（防止 NPU 冲突）。
-4. **TTS 双引擎**：优先 Bert-VITS2-MNN（音质好），兜底 sherpa-onnx VITS/Matcha。
+4. **TTS 双引擎**：TtsEngineWrapper 优先 Bert-VITS2-MNN，不存在则用 SherpaOnnxTts。TtsOrchestrator 管理中文（VITS MeloTTS）+ 英文（Piper Lessac）双路并行。
 5. **唤醒门控**：三态 FSM 控制音频流，IDLE 态只做轻量 VAD 不走 NPU，省电。
 6. **回声门控**：基于参考信号能量 + 麦克风-参考相关性，防止 TTS/媒体播放被 ASR 识别。
 7. **连续对话**：TTS 结束后 8 秒窗口，用户无需唤醒词可继续对话。
