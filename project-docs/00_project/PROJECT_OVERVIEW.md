@@ -208,7 +208,8 @@ IDLE ──[唤醒词]──→ LISTENING ──[ASR最终结果]──→ READY
 |------|------|------|---------|
 | SenseVoice RKNN | 本地 NPU (sherpa-onnx) | ASR 语音识别 | `/sdcard/sherpa-onnx-rk3576-20-seconds-sense-voice-zh-en-ja-ko-yue-2024-07-17/` |
 | Bert-VITS2-MNN | 本地 MNN (TtsService) | 中文 TTS（优先引擎） | `/sdcard/iptv-agent-models/tts/bert-vits2-MNN/` |
-| VITS MeloTTS zh_en | 本地 ONNX (sherpa-onnx) | 中文 TTS（SherpaOnnx 主引擎） | `/sdcard/iptv-agent-models/tts/vits-melo-tts-zh_en/` |
+| Matcha Icefall zh-en | 本地 ONNX (sherpa-onnx) | 中文 TTS（SherpaOnnx 回退#1） | `/sdcard/iptv-agent-models/tts/matcha-icefall-zh-en/` |
+| VITS Fanchen-C | 本地 ONNX (sherpa-onnx) | 中文 TTS（SherpaOnnx 回退#2） | `/sdcard/iptv-agent-models/tts/vits-zh-hf-fanchen-C/` |
 | Piper Lessac | 本地 ONNX (sherpa-onnx) | 英文 TTS（当前默认） | `/sdcard/iptv-agent-models/tts/piper-en-us-lessac/` |
 | MNN-TaoAvatar | 本地 MNN (NNR+A2BS) | 3D 数字人渲染+口型同步 | `/sdcard/iptv-agent-models/taoavatar/` |
 | DeepSeek/Qwen LLM | HTTP SSE | 通用问答 | `config.properties` (base_url/api_key/model) |
@@ -231,7 +232,7 @@ IDLE ──[唤醒词]──→ LISTENING ──[ASR最终结果]──→ READY
 1. **Activity 为中心**：无 DI 框架，`MainActivity` 手动编排所有模块。各模块通过接口回调通信。
 2. **回调驱动**：无 EventBus/LiveData，模块间通过接口回调链传递数据。
 3. **NPU 串行化**：ASR NPU 推理用 Mutex 保证同一时刻只有一个任务（防止 NPU 冲突）。
-4. **TTS 双引擎**：TtsEngineWrapper 优先 Bert-VITS2-MNN，不存在则用 SherpaOnnxTts。TtsOrchestrator 管理中文（VITS MeloTTS）+ 英文（Piper Lessac）双路并行。
+4. **TTS 双引擎**：TtsEngineWrapper 优先 Bert-VITS2-MNN，不存在则用 SherpaOnnxTts。TtsOrchestrator 管理中文 + 英文双路并行。中文 SherpaOnnx 自动回退链：vits-melo-tts-zh_en（未部署）→ matcha-icefall-zh-en → vits-zh-hf-fanchen-C。英文默认 Piper Lessac。
 5. **唤醒门控**：三态 FSM 控制音频流，IDLE 态只做轻量 VAD 不走 NPU，省电。
 6. **回声门控**：基于参考信号能量 + 麦克风-参考相关性，防止 TTS/媒体播放被 ASR 识别。
 7. **连续对话**：TTS 结束后 8 秒窗口，用户无需唤醒词可继续对话。
