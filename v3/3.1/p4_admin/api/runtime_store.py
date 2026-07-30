@@ -259,7 +259,11 @@ def build_release_package(hotel_id: str, payload: dict[str, Any],
     rel_dir.mkdir(parents=True, exist_ok=True)
     # knowledge.json
     kj_path = rel_dir / "knowledge.json"
-    kj_bytes = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    # Codex ISSUE 2a: content_sha 排除 built_at 等易变字段 (同业务内容应同内容指纹).
+    # built_at 已在 manifest 记录 (provenance); knowledge.json 用 stable 子集落盘,
+    # 保证 sha256sum(knowledge.json)==manifest.content_sha256 且同内容稳定.
+    _payload_stable = {k: v for k, v in payload.items() if k != "built_at"}
+    kj_bytes = json.dumps(_payload_stable, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
     kj_path.write_bytes(kj_bytes)
     content_sha = _sha256_bytes(kj_bytes)
     # embeddings 目录 (本版用简单 BoW 索引占位, 真实 embedding 由专门服务构建)

@@ -22,9 +22,10 @@
 验证：酒店 h-ca0a8599bd4b 发 v2/v3 golden 16/16→activate→active 查询真实答案；回滚 v3→v2 runtime 真读回旧值。DB publish_jobs/runtime_load_acks 诚实记录每次失败与成功，Codex 只读核实无虚假 ok。
 
 **Codex 核实遗留 ISSUE（P1/P2，不阻塞闭环）**：
-- (3) content_sha256 含 built_at → 同业务内容不同哈希；build_release_package 应排除易变字段
-- (4) 回滚审计 before_value.from_version 记成 target 而非真实回滚前版本（atomic_activate 后才读版本）
-- (6) :8774 候选跑在 abandoned session.scope，**无 systemd unit，崩溃不自动恢复**——上生产前必修
+- (3) content_sha256 含 built_at → **已修(Commit2)**：build_release_package 用 stable 子集(排除 built_at, sort_keys)落盘+算 sha；实测 v6/v7 同内容 content_sha 完全一致，file_sha==manifest_sha。
+- (4) 回滚审计 before_value.from_version → **已修(Commit2)**：`_pre_rollback_version` 在 atomic_activate 前捕获；实测审计 from_version=7（回滚前），不再是 target 6。
+- (6) :8774 无 systemd → **已修(Commit2)**：部署 `joctv-v31-gateway-phase2-candidate.service`（补 SENTENCE_SPLIT_MIN_LEN=18），cgroup 现 /system.slice/...，enabled+active，取代 abandoned scope。
+- **⚠️ 新发现 P1(Commit2)**：gateway 候选 active 知识(`_HOTEL_KNOWLEDGE_ENTRIES`)纯内存，systemd 重启后 active_entries 归 0，需重发 publish/activate 才恢复。生产前必修：gateway 启动应按 admin `hotel_runtime_state` 从 current 软链重载 knowledge.json。候选测试期重启后重发一次即恢复。
 
 ---
 

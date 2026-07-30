@@ -358,8 +358,10 @@ def run_rollback_pipeline(*, hotel_id: str, target_version: int,
     job_id = create_publish_job(
         release_id=release_id, hotel_id=hotel_id, kind="rollback",
         desired_version=target_version, initiated_by=initiated_by)
+    # Codex ISSUE 2b: 回滚前版本必须在 atomic_activate 前捕获, 否则审计 before_value 记成 target.
+    _pre_rollback_version = _current_active_version(hotel_id)
     _update_release(release_id, source_release_id=target["release_id"],
-                    rollback_from_version=_current_active_version(hotel_id))
+                    rollback_from_version=_pre_rollback_version)
 
     try:
         _transition_job(job_id, "ROLLING_BACK", audit_writer=audit_writer)
@@ -429,7 +431,7 @@ def run_rollback_pipeline(*, hotel_id: str, target_version: int,
         if audit_writer:
             audit_writer(action="knowledge_rollback", resource="knowledge_release",
                          resource_id=release_id,
-                         before_value={"from_version": _current_active_version(hotel_id)},
+                         before_value={"from_version": _pre_rollback_version},
                          after_value={"rolled_back_to": target_version},
                          message=reason or "")
         return {"release_id": release_id, "job_id": job_id,
