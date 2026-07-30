@@ -1,5 +1,10 @@
 # 75 - MT9679 Android 麦克探测 (报告75, L2_RUNTIME + L3_APP_ACCESSIBLE)
 
+> ⚠️ **2026-07-30 勘误 (Kimi 反驳 + 独立复核后)**: 本报告原结论"USB 麦无可用 AEC"**错误**。
+> AEC 实际**生效** (HAL 层神经网络 AEC)。详见末尾 §9 勘误。原 §1-§7 的"框架 AEC 挂不上"
+> 观察本身正确, 但据此下"无 AEC"结论是错的——厂商绕开框架在 HAL 层 (audio.primary.merak.so
+> 的 mf_aes_* + libAiNrMnn.so + 内部 Loopback 参考) 做了 AEC, 我漏看了这套。
+
 > Commit 3 / §三。自建 AECProbe APK (com.aecprobe, Java+手动 aapt2/d8 构建, 不走 Gradle)
 > 在 .113 (MT9679) 实跑, 复核 Kimi 结论 + 回答"新麦是哪个 / 有无 AEC"。
 > AudioSource 可切 (COMM=VOICE_COMMUNICATION / REC=VOICE_RECOGNITION / UNP / MIC),
@@ -64,6 +69,31 @@ routed_device 仍 = USB SYP-48M
 1. **拔 USB 摄像头后重测**: 确认内置麦路由 + VOICE_COMMUNICATION 下 HAL AEC 残留回声效果 + 灵敏度。(用户物理拔, 我重跑 probe)
 2. **强回声源**: 1kHz 经内置喇叭到麦太弱; 用视频/外放做强回声量化 AEC 残留。
 3. **人声 KWS/ASR**: 用户现场喊"小智小智"+ asr_test_300, 确认拾音+识别达标。
+
+---
+
+## 9. ⚠️ 勘误 (2026-07-30, Kimi 反驳 + 独立复核) — AEC 实际**生效**, 原结论错
+
+Kimi 做了我漏做的判别实验 (**自己喇叭 vs 等量外部声源**), 并指出"自己喇叭声录得很低"正是 AEC 在压, 不是灵敏度问题。我用 Kimi 的方法 + 原始样本 (aec_test/results/) **独立复核**, 坐实其结论:
+
+| 样本 (同房间/同 USB 麦) | 1kHz 残留 (top40%窗) | 整体 rms |
+|---|---|---|
+| usb_mic.wav — **面板自己喇叭**播 1kHz | **-78.4 dBFS** | -43.8 |
+| phone_1m.wav — **手机 1m 外部**播同 1kHz | **-54.2 dBFS** | -25.7 |
+| 差值 | **~24 dB** | |
+
+同麦同环境, 自己喇叭比外部声多被压 ~24dB → **只有 AEC (用参考信号消自己输出) 能解释**。Kimi 报的 -68.6 vs -44.1 我复算一致。另 usb_voip (-86.3) 比 usb_mic (-78.4) 还低 ~8dB → VOICE_COMMUNICATION 在 HAL AEC 之上再叠加一点抑制。
+
+**AEC 实现位置 (静态佐证, Kimi)**: 不是 USB 摄像头 (SYP-48M 纯采集, 拿不到参考); 是主音频 HAL `audio.primary.merak.so` 内置神经网络处理 — `mf_aes_*`(MNN 回声抑制) + `mf_ans_*`(NN 降噪) + `gan_stream_*`(语音增强) + `libAiNrMnn.so`, 配内部 Loopback 参考声卡, 用本机放音做参考消回声。在 **HAL 层**, 故框架层 `AcousticEchoCanceler.create()` 返回 null (厂商绕开框架)。
+
+**我原结论错在哪**:
+1. probe 只测"自己喇叭"一路 (有歧义: 低电平=AEC压 OR 灵敏度差), 未做"外部声源对照", 判别不出 → 误判为灵敏度差/无AEC。**判别 AEC 必须 own-speaker vs external-source A/B** (Kimi 做了)。
+2. 只盯 vocsndcard/voc_hw_aec 这条 AEC, **漏了 merak.so 的 mf_aes 神经网络 AEC** —— 它在 HAL 处理音频流 (含 USB 麦输入), 故 USB 麦录到的自己喇叭声也被消。
+3. "框架 AEC 挂不上"观察本身正确, 但据此下"无 AEC"结论下错地方。
+
+**最终结论 (回答用户"新麦是否有 AEC")**: **有, 且实测生效**。会议屏自己喇叭发出的声音 (含 TTS/视频/对端语音) 在被 USB 麦录到前, 已被 HAL 层神经网络 AEC 抑制 ~20-35dB。会议场景对端语音从屏喇叭放出再传回对端, 回声已被压, 不用担心。原报告 §7 的"拔 USB 才有 AEC"建议**作废**。
+
+**仍待确认 (AEC 已生效后的下一问)**: AEC + 神经降噪对近端**人声 KWS/ASR** 是否有副作用 (过消/失真) —— 需用户现场人声测试 (报告79/80)。另 com.aecprobe / com.test.aec 两个测试 APK 可留作回归或清理。
 
 ## 附录: probe 三组 diag 摘要
 | mode | source | routed | AEC_enabled | rms_db |
