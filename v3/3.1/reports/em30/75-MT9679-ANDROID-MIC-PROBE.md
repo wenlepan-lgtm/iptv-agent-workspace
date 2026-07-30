@@ -42,10 +42,28 @@ rms ≈ 20-31 / 32768  (≈ -60 ~ -64 dB),  peak ≈ 200-475
 - L4_ACOUSTICALLY_VALIDATED: **OPEN** (echo 太弱 + 无人声, 待强回声/人声实测)。
 - AEC: **NOT_AVAILABLE (当前 USB 路径)**。
 
-## 6. 待补 (下一步, 需用户决策)
-1. **强制内置麦对比**: probe 加 setPreferredDevice(TYPE_BUILTIN_MIC) → 测内置麦 + VOICE_COMMUNICATION 下 HAL AEC 是否生效 + 灵敏度是否更好。这决定"该不该换回内置麦"。
-2. **强回声源**: 当前 1kHz 经内置喇叭到 USB 麦太弱; 用 mictest 的视频/外放喇叭做更强回声, 才能量化 AEC 残留。
-3. **人声 KWS/ASR**: 用户现场喊"小智小智"+ asr_test_300 条目, 看 USB 麦拾音 + 识别是否达标 (本测无人声无法判)。
+## 6. 内置麦在 USB 连接时不可达 (BUILTIN 模式实测)
+probe 加 `setPreferredDevice(TYPE_BUILTIN_MIC)` 强制内置麦:
+```
+builtin_mic_not_found; available inputs=3   ← getDevices(GET_DEVICES_INPUTS) 返回 3 个, 无 BUILTIN_MIC
+routed_device 仍 = USB SYP-48M
+```
+- audio_policy 静态列了 "Built-In Mic" (Port ID 2), 但 **USB 连接时框架不把它枚举给 app 的 getDevices** → `setPreferredDevice` 找不到目标, 无法强制切回内置麦。
+- **结论**: USB SYP-48M 一旦连接, 就接管为唯一可达输入; 内置麦(及其 HAL AEC 通路)对普通 app 不可达。要用内置麦 + HAL AEC, **必须物理拔掉 USB 摄像头**, 让系统回落内置麦。
+
+## 7. 最终结论 (回答用户"新麦是否有 AEC")
+**当前 USB SYP-48M 麦 = 无可用 AEC, 且无法在 USB 连接下补救:**
+- HAL AEC 不覆盖 USB 路径 (走 vocsndcard 才有);
+- 软件 AEC 挂不上 USB session;
+- 内置麦(HAL AEC 所在)在 USB 连接时不可达。
+- 另: USB 摄像头麦灵敏度差 (-58 ~ -66 dB), 对 KWS/ASR 拾音不利。
+
+**唯一拿到 AEC 的路径**: 拔掉 USB 摄像头 → 系统回落内置麦 → VOICE_COMMUNICATION 触发 HAL AEC (待拔掉后实测确认)。或保留 USB 麦但接受无 AEC + 低灵敏度。
+
+## 8. 待补 (需用户操作)
+1. **拔 USB 摄像头后重测**: 确认内置麦路由 + VOICE_COMMUNICATION 下 HAL AEC 残留回声效果 + 灵敏度。(用户物理拔, 我重跑 probe)
+2. **强回声源**: 1kHz 经内置喇叭到麦太弱; 用视频/外放做强回声量化 AEC 残留。
+3. **人声 KWS/ASR**: 用户现场喊"小智小智"+ asr_test_300, 确认拾音+识别达标。
 
 ## 附录: probe 三组 diag 摘要
 | mode | source | routed | AEC_enabled | rms_db |

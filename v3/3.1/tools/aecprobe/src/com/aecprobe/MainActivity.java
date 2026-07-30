@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
             case "REC":  source = MediaRecorder.AudioSource.VOICE_RECOGNITION; break;
             case "UNP":  source = MediaRecorder.AudioSource.UNPROCESSED; break;
             case "MIC":  source = MediaRecorder.AudioSource.MIC; break;
+            case "BUILTIN":     source = MediaRecorder.AudioSource.VOICE_COMMUNICATION; break; // 强制内置麦
+            case "BUILTIN_REC": source = MediaRecorder.AudioSource.VOICE_RECOGNITION; break;   // 内置麦基线
             default:     source = MediaRecorder.AudioSource.VOICE_COMMUNICATION; break; // COMM
         }
 
@@ -86,6 +88,20 @@ public class MainActivity extends Activity {
                 return;
             }
             int sess = ar.getAudioSessionId();
+            // 强制内置麦 (绕过 USB 自动选择): setPreferredDevice(TYPE_BUILTIN_MIC)
+            if (tag.startsWith("BUILTIN")) {
+                try {
+                    android.media.AudioDeviceInfo[] ins = ((android.media.AudioManager)
+                        getSystemService(AUDIO_SERVICE)).getDevices(android.media.AudioManager.GET_DEVICES_INPUTS);
+                    android.media.AudioDeviceInfo builtin = null;
+                    for (android.media.AudioDeviceInfo d : ins)
+                        if (d.getType() == android.media.AudioDeviceInfo.TYPE_BUILTIN_MIC) { builtin = d; break; }
+                    if (builtin != null) {
+                        boolean ok = ar.setPreferredDevice(builtin);
+                        diag.append("setPreferredDevice(builtin)=").append(ok).append(" type=").append(builtin.getType()).append("\n");
+                    } else diag.append("builtin_mic_not_found; available inputs=").append(ins.length).append("\n");
+                } catch (Throwable t) { diag.append("setPreferred_err=").append(t).append("\n"); }
+            }
             diag.append("session=").append(sess).append("\n");
             diag.append("AEC_available=").append(AcousticEchoCanceler.isAvailable()).append("\n");
             diag.append("NS_available=").append(NoiseSuppressor.isAvailable()).append("\n");
