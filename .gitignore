@@ -111,6 +111,8 @@ sherpa-onnx-streaming-*/
 *.docx
 *.doc
 *.xlsx
+!v3/3.1/tools/joctv-hotel-kb-skill/templates/酒店知识采集模板.xlsx
+!v3/3.1/tools/joctv-hotel-kb-skill/examples/脱敏示例.xlsx
 *.pptx
 *.drawio
 

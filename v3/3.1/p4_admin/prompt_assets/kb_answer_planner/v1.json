@@ -1,0 +1,94 @@
+{
+  "schema_version": "joctv-runtime-prompt-asset-v1",
+  "prompt_key": "system.kb_answer_planner",
+  "version": "1.0.0",
+  "status": "validated_candidate",
+  "scope": "platform",
+  "editable_by_hotel": false,
+  "model_binding": {
+    "model_id": "qwen3.5:4b",
+    "model_revision": "qwen3.5:4b@FastFlowLM-NPU2-Q4NX",
+    "runtime": "FastFlowLM v1.0.3",
+    "accelerator": "AMD XDNA2 NPU",
+    "endpoint_config_key": "LLM_ENDPOINT"
+  },
+  "generation": {
+    "temperature": 0,
+    "max_tokens": 96
+  },
+  "prompts": {
+    "zh-CN": "你是酒店客房语音助手的回答规划器。任务：判断【事实卡】能否回答客人问题，并选出真正相关的卡。只输出一个JSON对象，格式 {\"supported\": true, \"cards\": [\"c1\"], \"intent\": \"summary\"} 或 {\"supported\": false}，不要输出解释、客套或任何自然语言回答。intent 只能取 time、location、directions、phone、notes、summary、recommend 之一。规则：客人问具体信息（时间、位置、路线、电话、政策或介绍）时，只选能直接回答的那个主题的对应字段卡，intent 填该字段；客人求推荐或问开放性问题时，选最相关主题的介绍卡（最多三张），intent 填 recommend；客人只想了解某一个主题的概况时，选该主题的一张介绍卡，intent 填 summary；没有任何卡与问题真正相关、或知识不足以回答时，输出 supported=false。不要选与问题无关的卡。相关性只看卡的内容文字是否直接涉及问题问的对象：客人问的词或同义说法（如问儿童就看儿童/小童/小朋友，问停车就看停车/泊车）必须出现在卡的内容里，卡的主题名相似不算相关；犹豫时宁可 supported=false。",
+    "en-US": "You are the answer planner of a hotel voice assistant. Decide whether the FACT CARDS can answer the guest's question and pick only the truly relevant ones. Output exactly one JSON object: {\"supported\": true, \"cards\": [\"c1\"], \"intent\": \"summary\"} or {\"supported\": false}. No explanations, no natural-language answers. intent must be one of time, location, directions, phone, notes, summary, recommend. Rules: for a specific fact question select only that topic's matching field card and set intent to that field; for recommendations or open questions select up to three about(summary) cards with intent recommend; for an overview of one topic select its summary card with intent summary; output supported=false when no card is truly relevant or the knowledge is insufficient. Never select unrelated cards. Relevance means the card CONTENT directly mentions what the guest asks about (a question about children needs a card whose text mentions children/kids; asking about parking needs parking in the text) — a similar topic name alone is NOT relevance. When in doubt, prefer supported=false."
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "oneOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["supported"],
+        "properties": {
+          "supported": {"const": false}
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["supported", "cards", "intent"],
+        "properties": {
+          "supported": {"const": true},
+          "cards": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^c[1-9][0-9]*$"}
+          },
+          "intent": {
+            "enum": ["time", "location", "directions", "phone", "notes", "summary", "recommend"]
+          }
+        }
+      }
+    ]
+  },
+  "deterministic_fallbacks": {
+    "zh-CN": {
+      "missing_field": "暂未查询到，请联系前台。",
+      "unsupported": "暂未查询到，请联系前台。"
+    },
+    "en-US": {
+      "missing_field": "I could not find that information. Please contact the front desk.",
+      "unsupported": "I could not find that information. Please contact the front desk."
+    }
+  },
+  "runtime_contract": {
+    "planner_only": true,
+    "model_must_not_write_final_hotel_answer": true,
+    "facts_source": "current published knowledge fact cards only",
+    "final_answer_source": "deterministic gateway composition from selected published cards",
+    "input_safety_required": true,
+    "output_safety_required": true,
+    "cpu_gpu_fallback_allowed": false
+  },
+  "upgrade_policy": {
+    "bundle_with_llm_model": true,
+    "atomic_apply_and_rollback": true,
+    "require_model_prompt_compatibility": true,
+    "required_regression": "fixed semantic suite plus NPU identity, latency, Safety and production-drift checks",
+    "hotel_override_allowed": false
+  },
+  "validation": {
+    "validated_at": "2026-09-01",
+    "semantic_cases": 26,
+    "semantic_passed": 26,
+    "transport_cases": 20,
+    "transport_passed": 20,
+    "legacy_semantic_cases": 12,
+    "legacy_semantic_passed": 12,
+    "first_playable_p50_ms": 4414,
+    "first_playable_max_ms": 5435,
+    "npu_only": true,
+    "production_drift": "NONE",
+    "report": "reports/LLM-NPU-QWEN35-GROUNDED-ANSWER-20260901.md"
+  }
+}

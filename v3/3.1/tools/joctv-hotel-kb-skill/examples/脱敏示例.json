@@ -1,0 +1,108 @@
+{
+  "schema_version": "joctv-hotel-kb-v1",
+  "hotel_id": "demo",
+  "package_name": "脱敏示例知识包（非真实酒店数据）",
+  "locale_policy": "bilingual_separate",
+  "entries": [
+    {
+      "id": 1,
+      "category": "玩",
+      "topic": {"zh": "健身房", "en": "Fitness Center"},
+      "keywords": {"zh": ["健身房", "健身中心", "器械"], "en": ["gym", "fitness center"]},
+      "answers": {
+        "zh": [
+          "健身房在示例酒店2楼，每天6:00到23:00对住店宾客免费开放。",
+          "示例酒店2楼设有健身房，住店宾客可免费使用，开放时间为每天6:00至23:00。",
+          "住店宾客可以免费使用2楼的健身房，每天从早上6:00一直开放到晚上23:00。"
+        ],
+        "en": [
+          "The gym is on the 2nd floor of the demo hotel, open daily from 6:00 to 23:00, free for in-house guests.",
+          "Located on the 2nd floor, the demo hotel's gym is free for in-house guests and open every day from 6:00 to 23:00.",
+          "In-house guests can use the 2nd-floor gym free of charge, from 6:00 in the morning until 23:00 daily."
+        ]
+      },
+      "context": {
+        "time": {"zh": "每天 6:00-23:00", "en": "Daily 6:00-23:00"},
+        "location": {"zh": "2楼", "en": "2nd floor"},
+        "directions": {"zh": "乘大堂电梯到2楼即到", "en": "Take the lobby elevator to the 2nd floor"},
+        "phone": "86 (21) 1234 5678",
+        "notes": {"zh": "配有跑步机、椭圆机等心肺器材和自由重量区，值班教练可提供指导。脱敏演示数据，非真实酒店信息。", "en": "Equipped with treadmills, elliptical machines and a free-weights area; a duty trainer can assist. De-identified demo data, not a real hotel."}
+      },
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "category": "食",
+      "topic": {"zh": "早餐", "en": "Breakfast"},
+      "keywords": {"zh": ["早餐", "自助早餐", "几点吃早饭"], "en": ["breakfast", "breakfast time"]},
+      "answers": {
+        "zh": [
+          "自助早餐在1楼悦餐厅供应，周一至周五7:00-10:30，周末7:00-11:00。",
+          "1楼悦餐厅供应自助早餐，开放时间是周一到周五7:00至10:30、周六和周日7:00至11:00。",
+          "每天的自助早餐都可以在1楼悦餐厅吃到：周一至五7:00开到10:30，周末则从7:00供应到11:00。"
+        ],
+        "en": [
+          "Buffet breakfast is served in the 1st-floor Yue Restaurant, 7:00-10:30 on weekdays and 7:00-11:00 on weekends.",
+          "The 1st-floor Yue Restaurant serves the buffet breakfast, from 7:00 to 10:30 Monday to Friday and 7:00 to 11:00 on weekends.",
+          "You can have the buffet breakfast at Yue Restaurant on the 1st floor — 7:00-10:30 on weekdays and 7:00-11:00 at weekends."
+        ]
+      },
+      "context": {
+        "time": {"zh": "周一至五 7:00-10:30；周末 7:00-11:00", "en": "Mon-Fri 7:00-10:30; weekends 7:00-11:00"},
+        "location": {"zh": "1楼悦餐厅", "en": "1st-floor restaurant"},
+        "directions": {"zh": "", "en": ""},
+        "phone": "86 (21) 1234 5678",
+        "notes": {"zh": "早餐含中式和西式档口，儿童1.2米以下免费；无需预约，凭房卡入场。脱敏演示数据，非真实酒店信息。", "en": "Chinese and Western stations; children under 1.2 m eat free; no reservation needed — just bring your room card. De-identified demo data, not a real hotel."}
+      },
+      "enabled": true
+    },
+    {
+      "id": 3,
+      "category": "服务",
+      "topic": {"zh": "延迟退房", "en": ""},
+      "keywords": {"zh": ["延迟退房", "晚点退房", "几点退房"], "en": []},
+      "answers": {
+        "zh": [
+          "标准退房时间为中午12:00；如需延迟退房，请在退房当天上午11:00前联系前台，视房态尽量安排，延迟至18:00前通常加收半天房费，具体以前台当日确认为准。",
+          "如需延迟退房，最迟要在退房当天上午11:00前联系前台申请，酒店会视房态尽量安排；标准退房时间是中午12:00，延迟到18:00之前一般加收半天房费，最终以前台当日答复为准。",
+          "退房标准时间为中午12:00，想晚点退房的宾客请在当天上午11:00前向前台提出，酒店将视房态安排；延迟至18:00前通常需加付半天房费，确切口径以当日前台确认为依据。"
+        ],
+        "en": []
+      },
+      "context": {
+        "time": {"zh": "退房 12:00；延迟申请截止 11:00", "en": ""},
+        "location": {"zh": "前台（1楼大堂）", "en": ""},
+        "directions": {"zh": "", "en": ""},
+        "phone": "86 (21) 1234 5678",
+        "notes": {"zh": "脱敏演示数据；本条故意只填中文，演示缺失语言时英文留空并报告。", "en": ""}
+      },
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "category": "婚宴",
+      "topic": {"zh": "婚宴服务", "en": "Wedding Banquet"},
+      "keywords": {"zh": ["婚宴", "婚礼", "办酒席"], "en": ["wedding", "banquet"]},
+      "answers": {
+        "zh": [
+          "示例酒店的婚宴服务由专职宴会团队承接，可在三间不同规模的宴会厅中按桌数定制菜单，预订请至少提前30天联系宴会销售。",
+          "婚礼宴席由示例酒店宴会团队统一安排，共提供三间规模不同的宴会厅，菜单按桌数定制，需提前至少30天预订。",
+          "在示例酒店办婚宴，宴会销售会协助在三间宴会厅中选场并按桌数定制菜单，请务必提前30天以上预订。"
+        ],
+        "en": [
+          "The demo hotel's wedding banquets are hosted by a dedicated events team across three ballrooms of different sizes, with menus tailored per table count; book at least 30 days ahead.",
+          "Wedding banquets at the demo hotel are arranged by the events team in one of three ballrooms, with per-table custom menus; please reserve at least 30 days in advance.",
+          "To host a wedding banquet, the demo hotel's events team will help you choose among three ballrooms and tailor the menu per table — book no later than 30 days ahead."
+        ]
+      },
+      "context": {
+        "time": {"zh": "预订提前期 ≥30 天", "en": "Book ≥30 days ahead"},
+        "location": {"zh": "宴会厅（1-3层）", "en": "Ballrooms, floors 1-3"},
+        "directions": {"zh": "", "en": ""},
+        "phone": "86 (21) 1234 5678",
+        "notes": {"zh": "本条演示自定义分类“婚宴”（九类之外原样保留）。脱敏演示数据，非真实酒店信息。", "en": "This row demonstrates a custom category kept as-is beyond the nine recommended ones. De-identified demo data, not a real hotel."}
+      },
+      "enabled": true
+    }
+  ]
+}
