@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "joctv-hotel-kb-v1.schema.json",
+  "title": "JOCTV Knowledge Package V1",
+  "description": "JOCTV 酒店知识包结构契约。语言策略为双语隔离：中文与英文分别存放；缺失语言留空；禁止把中文塞进英文字段或反之。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hotel_id", "package_name", "locale_policy", "entries"],
+  "properties": {
+    "schema_version": {"const": "joctv-hotel-kb-v1"},
+    "hotel_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "description": "目标后台的酒店ID；导入时按酒店内部序列重新生成稳定编号。"
+    },
+    "package_name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "locale_policy": {"const": "bilingual_separate"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/definitions/entry"}
+    }
+  },
+  "definitions": {
+    "bilingual_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh", "en"],
+      "properties": {
+        "zh": {"type": "string", "description": "中文内容；缺失时留空字符串，不得填英文。"},
+        "en": {"type": "string", "description": "英文内容；缺失时留空字符串，不得填中文。"}
+      }
+    },
+    "nonempty_string_list": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "answer_list": {
+      "anyOf": [
+        {
+          "type": "array",
+          "maxItems": 0,
+          "description": "该语言确实缺失时允许空数组。"
+        },
+        {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "topic", "keywords", "answers", "context", "enabled"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "category": {
+          "enum": ["衣", "食", "住", "行", "游", "购", "玩", "服务", "其他"],
+          "description": "固定九类；允许以后由规范扩展，包内不得自造新值。"
+        },
+        "topic": {"$ref": "#/definitions/bilingual_text"},
+        "keywords": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zh", "en"],
+          "properties": {
+            "zh": {"$ref": "#/definitions/nonempty_string_list"},
+            "en": {"$ref": "#/definitions/nonempty_string_list"}
+          }
+        },
+        "answers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zh", "en"],
+          "properties": {
+            "zh": {"$ref": "#/definitions/answer_list"},
+            "en": {"$ref": "#/definitions/answer_list"}
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["time", "location", "directions", "phone", "notes"],
+          "properties": {
+            "time": {"$ref": "#/definitions/bilingual_text"},
+            "location": {"$ref": "#/definitions/bilingual_text"},
+            "directions": {"$ref": "#/definitions/bilingual_text"},
+            "phone": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "电话为纯字符串，不分语言；没有则留空。"
+            },
+            "notes": {"$ref": "#/definitions/bilingual_text"}
+          }
+        },
+        "enabled": {"type": "boolean"}
+      }
+    }
+  }
+}
