@@ -30,7 +30,7 @@ description: JOCTV 安全防火墙规则包生成 Skill。在公司工作站上�
 - 操作符只有 `phrase`（2–128 字符）/ `regex`（受限白名单正则，≤200 字符）/ `token`（1–8 个小写拉丁/数字词；中文表达用 phrase/regex）/ `exception`（2–128 字符，作用于单一 feed 类别或 `*`）。
 - 每条新增 `phrase`/`token` 规则必须在同一变更里补充至少一条能触发它的**正例**（检测力门：无法被任何正例触发的规则视为死规则，直接拒绝）。
 
-## 3. 变更请求操作集（封闭；同一请求内每个目标只能触碰一次）
+## 3. 变更请求操作集（封闭；每种操作键集封闭，同一请求内每个目标只能触碰一次）
 
 ```json
 {"op": "add_rule",    "rule": {"id": "SFR-0036", "op": "phrase", "category": "grief_watch", "term": "总是想起去世的家人"}}
@@ -46,7 +46,7 @@ description: JOCTV 安全防火墙规则包生成 Skill。在公司工作站上�
 {"op": "delete_examples", "kind": "negative", "inputs": ["……"]}
 ```
 
-规则 `id`/`op` 不可变（稳定 ID：跨版本同 id 即同规则，改操作符 = 删除 + 新 id 新增）；`delete_category` 要求类别下已无规则；`delete_response` 要求无类别引用（最终校验把关）。新规则 id 建议续用当前最大编号（如 `SFR-0036`），已删除的编号不回收。
+规则 `id`/`op` 不可变（稳定 ID：跨版本同 id 即同规则，改操作符 = 删除 + 新 id 新增，校验器 `--prev` 时强制 `RULE_OP_IMMUTABLE`）；每种操作的键集封闭（未知字段 → `REQUEST_SCHEMA` 拒绝）；同一请求内每个目标（规则 id/类别码/回复 ref/正负例串）只能触碰一次，**删除后同 ID/码/ref/串重建同样拒绝**（`OP_CONFLICT`）；`delete_category` 要求类别下已无规则；`delete_response` 要求无类别引用（最终校验把关）。新规则 id 建议续用当前最大编号（如 `SFR-0036`），已删除的编号不回收。
 
 ## 4. 编译流程
 
@@ -94,7 +94,7 @@ description: JOCTV 安全防火墙规则包生成 Skill。在公司工作站上�
 - 源文件必须伴随 `<file>.sha256` sidecar（`<hex>  <name>` 格式），哈希与文件字节一致。
 - 内容五键与打包工具输入完全同构；打包工具忽略信封键，因此本 Skill 不修改冻结 Schema。
 - 确定性：相同输入与配置产生字节等价输出；重复生成哈希不变。
-- 变更摘要 `change-summary.json` 与实际差异逐集合一致（`--summary` 复算比对，任何未声明改动 → `SUMMARY_DRIFT` 拒绝）。
+- 变更摘要 `change-summary.json` 与 prev→next 全字段绑定：base/next `sequence`/`version`/`SHA256`、`counts`、`changes` 完整键集（类别/规则/回复 added/modified/deleted + 正负例 added/deleted）逐一复算比对，缺失/多余键 → `SUMMARY_INVALID`，未声明改动或值漂移 → `SUMMARY_DRIFT` 拒绝。
 - 重复/冲突：重复规则 id、重复类别码、同类别重复短语/词表/例外、正负例同串、内置类别碰撞、删除非空类别、同一请求重复触碰同一目标，全部拒绝。
 - 危险空值：任何内容字段 null/缺失/空串拒绝；受限正则静态安全策略（白名单字符、禁构造、禁反向引用、禁嵌套量词）与运行时同款。
 
@@ -102,7 +102,7 @@ description: JOCTV 安全防火墙规则包生成 Skill。在公司工作站上�
 
 ```bash
 python3 scripts/validate_feed_source.py <src.json> [--prev <prev.json>] [--summary <summary.json>]
-python3 scripts/test_validate_feed_source.py          # 纯标准库轻量门 28 例
+python3 scripts/test_validate_feed_source.py          # 纯标准库轻量门 39 例
 # 仓库工作站（需 zstandard + cryptography）:
 python3 scripts/test_feed_skill_e2e.py                # 真实消费者链路 27 例
 ```

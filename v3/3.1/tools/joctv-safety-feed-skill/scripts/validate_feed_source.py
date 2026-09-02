@@ -13,8 +13,11 @@ joctv.safety-feed.v1 / joctv.safety-rule.v1 Schema)。
 校验项 (与任务箱 V26-07 一一对应, 全部确定性、零网络、零第三方依赖):
 
   版本递增    --prev 时: sequence 必须恰为上一版 +1, version 必须变化;
-  稳定 ID     规则 id 形如 SFR-xxx 且全局唯一; --prev + --summary 时逐项
-              复算 prev→src 差异并与变更摘要比对, 任何未声明的改动拒绝;
+  稳定 ID     规则 id 形如 SFR-xxx 且全局唯一; --prev 时共享 id 的规则不得
+              改变 op (RULE_OP_IMMUTABLE, 改操作符 = 删除 + 新 id 新增);
+  摘要绑定    --prev + --summary 时复算 prev→src 差异 (含正负例 added/
+              deleted) 与摘要全字段比对: base/next sequence、version、
+              SHA256、counts、changes 完整键集, 缺失/多余/漂移一律拒绝;
   语言字段    name_zh/name_en、回复 zh/en 必须双语齐备且不串语;
   重复/冲突   重复规则 id、重复类别码、同类别重复短语/词表/例外、
               正负例同串冲突、与平台内置类别码碰撞;
@@ -49,6 +52,14 @@ from pathlib import Path
 
 SRC_SCHEMA = "joctv-safety-feed-src-v1"
 SUMMARY_SCHEMA = "joctv-safety-feed-change-summary-v1"
+
+# 变更摘要顶层键集 (封闭; 生成器按同一次序输出, 校验器要求恰好齐全)
+SUMMARY_KEYS = ("schema_version", "base_sequence", "next_sequence",
+                "base_version", "next_version", "base_source_sha256",
+                "next_source_sha256", "reason", "operations_applied",
+                "changes", "counts")
+SUMMARY_COUNT_KEYS = ("categories", "rules", "responses",
+                      "examples_positive", "examples_negative")
 
 ENVELOPE_KEYS = ("schema_version", "sequence", "version", "prev_source_sha256",
                  "categories", "rules", "responses",
@@ -408,6 +419,20 @@ def validate_source(path: Path, *, prev_path: Path | None = None,
             raise SkillError("VERSION_NOT_INCREMENTED",
                              "version 与上一版相同")
 
+        # 稳定 ID: 共享规则 id 跨版本不得改变 op (改操作符 = 删除 + 新 id 新增)
+        prev_ops = {r.get("id"): r.get("op") for r in prev["rules"]
+                    if isinstance(r, dict)}
+        for r in src["rules"]:
+            if not isinstance(r, dict):
+                continue
+            pid = r.get("id")
+            if pid in prev_ops and r.get("op") != prev_ops[pid]:
+                raise SkillError(
+                    "RULE_OP_IMMUTABLE",
+                    f"规则 {pid} 操作符跨版本不可变 "
+                    f"({prev_ops[pid]} → {r.get('op')}); "
+                    f"如需改操作符请删除后用新 id 新增")
+
         # 检测力: 新增 phrase/token 规则必须有正例覆盖
         prev_ids = {r.get("id") for r in prev["rules"] if isinstance(r, dict)}
         pos_norm = [normalize_text(p) for p in src["examples_positive"]]
@@ -431,14 +456,23 @@ def validate_source(path: Path, *, prev_path: Path | None = None,
                         f"{' '.join(r.get('terms') or [])[:40]}")
 
         if summary_path is not None:
-            _check_summary(prev_src, src, summary_path)
+            _check_summary(prev_src, src, summary_path,
+                           prev_digest=prev_digest, src_digest=digest,
+                           counts=counts)
 
     return {"sequence": src["sequence"], "version": src["version"],
             "sha256": digest, **counts}
 
 
-def _check_summary(prev: dict, src: dict, summary_path: Path) -> None:
-    """SUMMARY_MATCH: 复算 prev→src 差异, 与变更摘要逐集合比对。"""
+def _check_summary(prev: dict, src: dict, summary_path: Path, *,
+                   prev_digest: str, src_digest: str, counts: dict) -> None:
+    """SUMMARY 绑定: 所有可由 prev/src 复算的字段逐一复算比对。
+
+    覆盖 base/next sequence、version、SHA256、counts、changes 完整键集
+    (含正负例 added/deleted); 缺失/多余键 → SUMMARY_INVALID, 值漂移 →
+    SUMMARY_DRIFT。operations_applied/reason 无法由 prev/src 复算 (不同请求
+    可产生相同结果), 仅做类型门。
+    """
     try:
         s = json.loads(summary_path.read_text(encoding="utf-8"))
     except ValueError as e:
@@ -446,19 +480,65 @@ def _check_summary(prev: dict, src: dict, summary_path: Path) -> None:
     if not isinstance(s, dict) or s.get("schema_version") != SUMMARY_SCHEMA:
         raise SkillError("SUMMARY_INVALID",
                          f"变更摘要 schema_version 必须是 {SUMMARY_SCHEMA}")
-    diff = compute_diff(prev, src)
-    declared = s.get("changes") or {}
-    for key, actual in diff.items():
-        stated = set(declared.get(key) or [])
-        if stated != actual:
+    missing = [k for k in SUMMARY_KEYS if k not in s]
+    extra = set(s) - set(SUMMARY_KEYS)
+    if missing or extra:
+        raise SkillError("SUMMARY_INVALID",
+                         f"变更摘要字段必须恰好为 {list(SUMMARY_KEYS)}; "
+                         f"缺 {missing} 多 {sorted(extra)}")
+    for key, want in (("base_sequence", prev["sequence"]),
+                      ("next_sequence", src["sequence"]),
+                      ("base_version", prev["version"]),
+                      ("next_version", src["version"]),
+                      ("base_source_sha256", prev_digest),
+                      ("next_source_sha256", src_digest)):
+        if s[key] != want:
             raise SkillError(
                 "SUMMARY_DRIFT",
-                f"变更摘要与实际差异不一致 ({key}): 摘要={sorted(stated)} "
-                f"实际={sorted(actual)}")
+                f"变更摘要 {key} 与复算值不一致: "
+                f"摘要={str(s[key])[:24]} 实际={str(want)[:24]}")
+    stated_counts = s["counts"]
+    if not isinstance(stated_counts, dict) or \
+            set(stated_counts) != set(SUMMARY_COUNT_KEYS):
+        raise SkillError("SUMMARY_INVALID",
+                         f"变更摘要 counts 键集必须恰好为 "
+                         f"{sorted(SUMMARY_COUNT_KEYS)}")
+    for key in SUMMARY_COUNT_KEYS:
+        if stated_counts[key] != counts[key]:
+            raise SkillError(
+                "SUMMARY_DRIFT",
+                f"变更摘要 counts.{key} 与复算值不一致: "
+                f"摘要={stated_counts[key]} 实际={counts[key]}")
+    ops_applied = s["operations_applied"]
+    if not isinstance(ops_applied, int) or isinstance(ops_applied, bool) \
+            or ops_applied < 1:
+        raise SkillError("SUMMARY_INVALID", "operations_applied 必须是正整数")
+    if not isinstance(s["reason"], str):
+        raise SkillError("SUMMARY_INVALID", "reason 必须是字符串")
+    diff = compute_diff(prev, src)
+    declared = s["changes"]
+    if not isinstance(declared, dict) or set(declared) != set(diff):
+        stated = sorted(declared) if isinstance(declared, dict) \
+            else type(declared).__name__
+        raise SkillError(
+            "SUMMARY_INVALID",
+            f"changes 键集必须恰好为 {sorted(diff)}; 实际 {stated}")
+    for key, actual in diff.items():
+        stated_list = declared[key]
+        stated_set = set(stated_list) if isinstance(stated_list, list) \
+            else None
+        if stated_set is None or stated_set != actual:
+            shown = sorted(stated_list)[:6] if isinstance(stated_list, list) \
+                else str(stated_list)[:40]
+            raise SkillError(
+                "SUMMARY_DRIFT",
+                f"变更摘要与实际差异不一致 ({key}): 摘要={shown} "
+                f"实际={sorted(actual)[:6]}")
 
 
 def compute_diff(prev: dict, src: dict) -> dict[str, set]:
-    """确定性差异: 分类别/规则/回复的 added/modified/deleted id 集合。"""
+    """确定性差异: 类别/规则/回复的 added/modified/deleted id 集合,
+    以及正负例的 added/deleted 字符串集合 (示例为原子串, 无 modified)。"""
     out: dict[str, set] = {}
     p_cats = {c.get("code"): c for c in prev["categories"]}
     s_cats = {c.get("code"): c for c in src["categories"]}
@@ -478,6 +558,10 @@ def compute_diff(prev: dict, src: dict) -> dict[str, set]:
     out["responses_deleted"] = set(p_resp) - set(s_resp)
     out["responses_modified"] = {k for k in p_resp.keys() & s_resp.keys()
                                  if p_resp[k] != s_resp[k]}
+    for kind in ("positive", "negative"):
+        key = f"examples_{kind}"
+        out[f"{key}_added"] = set(src[key]) - set(prev[key])
+        out[f"{key}_deleted"] = set(prev[key]) - set(src[key])
     return out
 
 

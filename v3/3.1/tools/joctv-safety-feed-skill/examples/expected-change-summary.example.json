@@ -29,7 +29,15 @@
       "grief_support"
     ],
     "responses_deleted": [],
-    "responses_modified": []
+    "responses_modified": [],
+    "examples_positive_added": [
+      "I always feel overwhelmed at work these days",
+      "最近总是想起去世的家人，心里空落落的",
+      "连续失眠很多天，整个人很疲惫"
+    ],
+    "examples_positive_deleted": [],
+    "examples_negative_added": [],
+    "examples_negative_deleted": []
   },
   "counts": {
     "categories": 3,

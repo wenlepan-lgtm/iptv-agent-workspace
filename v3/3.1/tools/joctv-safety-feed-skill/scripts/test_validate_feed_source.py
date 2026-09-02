@@ -22,6 +22,17 @@ N 组 (负例, 每项断言精确错误码 — 检测力真实):
   Schema: N16 REGEX_DANGEROUS (嵌套量词)  N17 SIDECAR_MISMATCH
   冲突:  N18 CATEGORY_NOT_EMPTY         N19 EXAMPLE_CONFLICT (正负例同串)
   检测力: N20 EXAMPLE_COVERAGE_MISSING (新规则无正例覆盖)
+  请求键集: N21 REQUEST_SCHEMA (add_response 未知字段)
+  稳定ID重建: N22 OP_CONFLICT (delete_rule 后同 ID 重建 phrase→regex)
+         N23 OP_CONFLICT (delete_category 后同码重建)
+         N24 OP_CONFLICT (delete_response 后同 ref 重建)
+         N25 OP_CONFLICT (示例先增后删同串)
+         N26 RULE_OP_IMMUTABLE (prev→next 共享 ID 改 op)
+  摘要绑定: N27 SUMMARY_DRIFT (未声明正例漂移)
+         N28 SUMMARY_DRIFT (next_source_sha256 篡改全0)
+         N29 SUMMARY_DRIFT (next_sequence=999)
+         N30 SUMMARY_DRIFT (counts 全 0)
+         N31 SUMMARY_INVALID (changes 多余键)
 
 运行: python3 scripts/test_validate_feed_source.py   (仓库内或 Skill 目录内均可)
 """
@@ -294,6 +305,108 @@ def main() -> int:
                             "category": "low_mood_watch",
                             "term": "完全没有正例覆盖的短语"}}]), tmp / "n20"),
                     "EXAMPLE_COVERAGE_MISSING")
+
+        # ── 请求 Schema: 每种操作键集封闭 (未知字段到达写入阶段前拒绝) ──
+        expect_fail("N21-request-unknown-field",
+                    gen(BASE, make_request(tmp, ops_override=[
+                        {"op": "add_response", "ref": "grief_support",
+                         "zh": "听到这些我很心疼。", "en": "I am so sorry.",
+                         "unexpected_field": 1}]), tmp / "n21"),
+                    "REQUEST_SCHEMA")
+
+        # ── 稳定 ID: 删除后同 ID 重建 (phrase→regex) 不得绕过 ──
+        expect_fail("N22-rule-rebuild-same-id",
+                    gen(BASE, make_request(tmp, ops_override=[
+                        {"op": "delete_rule", "id": "SFR-0001"},
+                        {"op": "add_rule", "rule": {
+                            "id": "SFR-0001", "op": "regex",
+                            "category": "self_harm_expr", "term": "我想消失"}}]),
+                        tmp / "n22"),
+                    "OP_CONFLICT")
+
+        # ── 类别同类重复触碰: 清空规则 → 删除类别 → 同码重建 ──
+        expect_fail("N23-category-rebuild-same-code",
+                    gen(BASE, make_request(tmp, ops_override=[
+                        {"op": "delete_rule", "id": "SFR-0006"},
+                        {"op": "delete_rule", "id": "SFR-0007"},
+                        {"op": "delete_rule", "id": "SFR-0009"},
+                        {"op": "delete_category", "code": "low_mood_watch"},
+                        {"op": "add_category", "category": {
+                            "code": "low_mood_watch", "name_zh": "重建类别",
+                            "name_en": "Rebuilt watch", "action": "warn",
+                            "reply_ref": "warm_suggest"}}]), tmp / "n23"),
+                    "OP_CONFLICT")
+
+        # ── 回复同类重复触碰: 删除后同 ref 重建 ──
+        expect_fail("N24-response-rebuild-same-ref",
+                    gen(BASE, make_request(tmp, ops_override=[
+                        {"op": "delete_response", "ref": "warm_suggest"},
+                        {"op": "add_response", "ref": "warm_suggest",
+                         "zh": "重建话术。", "en": "Rebuilt reply."}]),
+                        tmp / "n24"),
+                    "OP_CONFLICT")
+
+        # ── 示例同类重复触碰: 先增后删同串 ──
+        expect_fail("N25-example-touch-twice",
+                    gen(BASE, make_request(tmp, ops_override=[
+                        {"op": "add_examples", "kind": "positive",
+                         "inputs": ["一条全新的正例句子"]},
+                        {"op": "delete_examples", "kind": "positive",
+                         "inputs": ["一条全新的正例句子"]}], next_sequence=2),
+                        tmp / "n25"),
+                    "OP_CONFLICT")
+
+        # ── 稳定 ID: prev→next 共享规则 ID 改操作符 ──
+        opflip = json.loads((out1 / "safety-feed-src.s0002.json").read_text("utf-8"))
+        for rule in opflip["rules"]:
+            if rule["id"] == "SFR-0006":
+                rule["op"] = "regex"   # phrase → regex, 内容域仍合法
+        n26 = tmp / "n26.json"
+        n26.write_text(json.dumps(opflip, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        reseal(n26)
+        expect_fail("N26-rule-op-immutable",
+                    val(n26, "--prev", str(BASE)), "RULE_OP_IMMUTABLE")
+
+        # ── 摘要绑定: 未声明的正例漂移 (旧校验放行, 现必须拒) ──
+        exdrift = json.loads((out1 / "safety-feed-src.s0002.json").read_text("utf-8"))
+        exdrift["examples_positive"].append("这是未在摘要声明的正例")
+        n27 = tmp / "n27.json"
+        n27.write_text(json.dumps(exdrift, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        reseal(n27)
+        expect_fail("N27-summary-example-drift",
+                    val(n27, "--prev", str(BASE),
+                        "--summary", str(out1 / "change-summary.json")),
+                    "SUMMARY_DRIFT")
+
+        # ── 摘要绑定: 版本链/counts/键集篡改 ──
+        def tampered_summary(mutate) -> Path:
+            s = json.loads((out1 / "change-summary.json").read_text("utf-8"))
+            mutate(s)
+            p = tmp / f"sum-{id(mutate)}.json"
+            p.write_text(json.dumps(s, ensure_ascii=False, indent=2) + "\n", "utf-8")
+            return p
+
+        expect_fail("N28-summary-next-sha-tamper",
+                    val(out1 / "safety-feed-src.s0002.json", "--prev", str(BASE),
+                        "--summary", str(tampered_summary(
+                            lambda s: s.__setitem__("next_source_sha256", "0" * 64)))),
+                    "SUMMARY_DRIFT")
+        expect_fail("N29-summary-next-seq-tamper",
+                    val(out1 / "safety-feed-src.s0002.json", "--prev", str(BASE),
+                        "--summary", str(tampered_summary(
+                            lambda s: s.__setitem__("next_sequence", 999)))),
+                    "SUMMARY_DRIFT")
+        expect_fail("N30-summary-counts-tamper",
+                    val(out1 / "safety-feed-src.s0002.json", "--prev", str(BASE),
+                        "--summary", str(tampered_summary(
+                            lambda s: s.__setitem__(
+                                "counts", {k: 0 for k in s["counts"]})))),
+                    "SUMMARY_DRIFT")
+        expect_fail("N31-summary-changes-extra-key",
+                    val(out1 / "safety-feed-src.s0002.json", "--prev", str(BASE),
+                        "--summary", str(tampered_summary(
+                            lambda s: s["changes"].__setitem__("rules_bogus", [])))),
+                    "SUMMARY_INVALID")
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

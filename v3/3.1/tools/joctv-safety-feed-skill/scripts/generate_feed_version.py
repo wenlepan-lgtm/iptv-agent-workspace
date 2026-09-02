@@ -15,7 +15,8 @@ p4_admin/tools/safety_feed_build.py 的 SRC 输入完全同构 — 生成结果�
     {schema_version, base_source_sha256, base_sequence,
      next_sequence, next_version, reason?, operations: [...]}
 
-操作集合 (封闭, 每个目标一条; 同一请求内重复触碰同一目标 → OP_CONFLICT):
+操作集合 (封闭; 每种操作的键集封闭, 同一请求内重复触碰同一目标 — 规则 id/
+类别码/回复 ref/正负例串 — → OP_CONFLICT, 删除后同 ID/码/ref/串重建同样拒绝):
 
     add_rule    {rule: {id, op, category, term|terms}}
     modify_rule {id, patch: {term|terms|category}}      (id/op 不可变)
@@ -62,6 +63,22 @@ REQUEST_KEYS = ("schema_version", "base_source_sha256", "base_sequence",
                 "next_sequence", "next_version", "reason", "operations")
 RULE_KEY_ORDER = ("id", "op", "category", "term", "terms")
 CATEGORY_KEY_ORDER = ("code", "name_zh", "name_en", "action", "reply_ref")
+
+# 每种操作的精确键集 (含 op 本身; 与 joctv-safety-feed-change-v1.schema.json
+# 的 additionalProperties=false 定义一致, 未知/缺失字段一律 REQUEST_SCHEMA 拒绝)
+OP_KEYS = {
+    "add_rule": frozenset({"op", "rule"}),
+    "modify_rule": frozenset({"op", "id", "patch"}),
+    "delete_rule": frozenset({"op", "id"}),
+    "add_category": frozenset({"op", "category"}),
+    "modify_category": frozenset({"op", "code", "patch"}),
+    "delete_category": frozenset({"op", "code"}),
+    "add_response": frozenset({"op", "ref", "zh", "en"}),
+    "modify_response": frozenset({"op", "ref", "patch"}),
+    "delete_response": frozenset({"op", "ref"}),
+    "add_examples": frozenset({"op", "kind", "inputs"}),
+    "delete_examples": frozenset({"op", "kind", "inputs"}),
+}
 
 
 def _dump(obj) -> str:
@@ -168,11 +185,20 @@ def cmd_generate(args) -> int:
     touched_rules: set[str] = set()
     touched_cats: set[str] = set()
     touched_resp: set[str] = set()
+    touched_examples: set[tuple[str, str]] = set()
     for i, op in enumerate(ops):
         if not isinstance(op, dict):
             raise SkillError("REQUEST_SCHEMA", f"operations[{i}] 必须是对象")
         kind = op.get("op")
         where = f"operations[{i}]"
+        allowed_keys = OP_KEYS.get(kind)
+        if allowed_keys is None:
+            raise SkillError("REQUEST_SCHEMA", f"{where}: 未知操作 {str(kind)[:30]}")
+        if set(op) != allowed_keys:
+            raise SkillError(
+                "REQUEST_SCHEMA",
+                f"{where}: {kind} 字段必须恰好为 {sorted(allowed_keys)}; "
+                f"实际 {sorted(op)}")
 
         if kind == "add_rule":
             rule = op.get("rule")
@@ -181,6 +207,9 @@ def cmd_generate(args) -> int:
             rid = rule.get("id")
             if not isinstance(rid, str) or not RULE_ID_RE.fullmatch(rid or ""):
                 raise SkillError("RULE_ID_INVALID", f"规则 id 非法: {str(rid)[:40]}")
+            if rid in touched_rules:
+                raise SkillError("OP_CONFLICT",
+                                 f"同一请求内重复触碰规则 (含删除后同 ID 重建): {rid}")
             if any(r.get("id") == rid for r in next_src["rules"]):
                 raise SkillError("RULE_DUP", f"规则 id 已存在 (含本次新增): {rid}")
             rop = rule.get("op")
@@ -243,6 +272,9 @@ def cmd_generate(args) -> int:
             code = cat.get("code")
             if not isinstance(code, str) or not CATEGORY_CODE_RE.fullmatch(code or ""):
                 raise SkillError("CATEGORY_CODE_INVALID", f"类别码非法: {str(code)[:40]}")
+            if code in touched_cats:
+                raise SkillError("OP_CONFLICT",
+                                 f"同一请求内重复触碰类别 (含删除后同码重建): {code}")
             if code in PLATFORM_BUILTIN_CATEGORY_CODES:
                 raise SkillError("CATEGORY_COLLISION",
                                  f"类别码与平台内置类别碰撞 (不可覆盖): {code}")
@@ -297,6 +329,9 @@ def cmd_generate(args) -> int:
             if not isinstance(ref, str) or not RESPONSE_REF_RE.fullmatch(ref or ""):
                 raise SkillError("RESPONSE_REF_INVALID",
                                  f"回复引用名非法: {str(ref)[:40]}")
+            if ref in touched_resp:
+                raise SkillError("OP_CONFLICT",
+                                 f"同一请求内重复触碰回复 (含删除后同 ref 重建): {ref}")
             if ref in next_src["responses"]:
                 raise SkillError("RESPONSE_DUP", f"回复引用已存在: {ref}")
             zh, en = op.get("zh"), op.get("en")
@@ -344,6 +379,10 @@ def cmd_generate(args) -> int:
                     or not all(isinstance(x, str) and x for x in inputs):
                 raise SkillError("REQUEST_SCHEMA",
                                  f"{where}: inputs 必须是非空字符串列表")
+            clash = [x for x in inputs if (ekind, x) in touched_examples]
+            if clash:
+                raise SkillError("OP_CONFLICT",
+                                 f"同一请求内重复触碰示例 ({key}): {clash[0][:40]}")
             if kind == "add_examples":
                 dup = [x for x in inputs if x in next_src[key]]
                 if dup:
@@ -355,8 +394,9 @@ def cmd_generate(args) -> int:
                     raise SkillError("TARGET_NOT_FOUND",
                                      f"{key} 中不存在要删除的示例: {missing[0][:40]}")
                 next_src[key] = [x for x in next_src[key] if x not in inputs]
+            touched_examples.update((ekind, x) for x in inputs)
 
-        else:
+        else:   # 不可达 (OP_KEYS 未含的 kind 已在上面拒绝); 保留 fail-closed
             raise SkillError("REQUEST_SCHEMA", f"{where}: 未知操作 {str(kind)[:30]}")
 
     out_src = {"schema_version": SRC_SCHEMA,

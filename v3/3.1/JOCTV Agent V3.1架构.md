@@ -6700,7 +6700,7 @@ joctv-safety-feed-src-v1 源文件 = 版本信封(schema_version/sequence/versio
 与运行时协议的一致性由同源校验保证，而不是靠人工对照：
 
 - 输出永远是**完整版本**而非增量补丁；相同输入与配置产生字节等价结果；生成失败零输出、旧版输入文件不被修改。
-- 生成侧确定性校验与后台消费者同一套约束：`sequence` 恰为上一版 +1、`version` 必须变化、`prev_source_sha256` 构成版本链、规则 `SFR-*` id 稳定且唯一、操作符白名单（phrase/regex/token/exception）、受限正则静态安全策略、block/escalate 必须有双语恢复话术、类别码不得碰撞平台内置类别（镜像冻结清单，E2E 门断言与运行时集合一致）、危险空值与重复/冲突拒绝、变更摘要与实际差异逐集合比对（未声明改动拒绝）、新增 phrase/token 规则必须有正例覆盖。
+- 生成侧确定性校验与后台消费者同一套约束：`sequence` 恰为上一版 +1、`version` 必须变化、`prev_source_sha256` 构成版本链、规则 `SFR-*` id 稳定且唯一（跨版本共享 id 不得改操作符，`RULE_OP_IMMUTABLE`）、变更请求每种操作键集封闭且同一目标（规则 id/类别码/回复 ref/正负例串，含删除后同标识重建）只能触碰一次、操作符白名单（phrase/regex/token/exception）、受限正则静态安全策略、block/escalate 必须有双语恢复话术、类别码不得碰撞平台内置类别（镜像冻结清单，E2E 门断言与运行时集合一致）、危险空值与重复/冲突拒绝、变更摘要与 prev→next 差异及版本链全字段绑定（base/next sequence/version/SHA256、counts、含正负例 added/deleted 的完整 changes 键集；缺失/多余/漂移一律拒绝）、新增 phrase/token 规则必须有正例覆盖。
 - 源文件内容五键与冻结打包工具 `p4_admin/tools/safety_feed_build.py` 的输入同构（信封键被该工具忽略），因此 Skill 不修改 `joctv.safety-feed.v1` / `joctv.safety-rule.v1` 冻结 Schema；打包工具自校验与后台「检查更新并应用」走同一份消费者代码，构建通过即后台验证可接受。
 - Ed25519 私钥只存在于工作站受控路径（仓库外，0600）；GitHub 备份只含 Skill 源码、Schema、脱敏示例与测试。
 
