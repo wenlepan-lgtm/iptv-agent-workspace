@@ -1,0 +1,136 @@
+{
+  "schema_version": "joctv-safety-feed-src-v1",
+  "sequence": 2,
+  "version": "2026.09.02-2",
+  "prev_source_sha256": "55d2f5a657a9d599b2c7af35d11f780af62b787a03a8f2282066d2365d6205bc",
+  "categories": [
+    {
+      "code": "self_harm_expr",
+      "name_zh": "自伤扩展表达（示例）",
+      "name_en": "Extended self-harm expressions (example)",
+      "action": "block",
+      "reply_ref": "care_general"
+    },
+    {
+      "code": "low_mood_watch",
+      "name_zh": "情绪低落关注（示例）",
+      "name_en": "Low mood watch (example)",
+      "action": "warn",
+      "reply_ref": "warm_suggest"
+    },
+    {
+      "code": "grief_watch",
+      "name_zh": "丧亲与哀伤关注（示例）",
+      "name_en": "Grief and loss watch (example)",
+      "action": "warn",
+      "reply_ref": "grief_support"
+    }
+  ],
+  "rules": [
+    {
+      "id": "SFR-0001",
+      "op": "phrase",
+      "category": "self_harm_expr",
+      "term": "我想消失"
+    },
+    {
+      "id": "SFR-0002",
+      "op": "phrase",
+      "category": "self_harm_expr",
+      "term": "我是别人的负担"
+    },
+    {
+      "id": "SFR-0003",
+      "op": "phrase",
+      "category": "self_harm_expr",
+      "term": "i want to disappear"
+    },
+    {
+      "id": "SFR-0004",
+      "op": "regex",
+      "category": "self_harm_expr",
+      "term": "(?:wanna|want|going)to(?:dis)?appear"
+    },
+    {
+      "id": "SFR-0005",
+      "op": "token",
+      "category": "self_harm_expr",
+      "terms": [
+        "not",
+        "worth",
+        "living"
+      ]
+    },
+    {
+      "id": "SFR-0006",
+      "op": "phrase",
+      "category": "low_mood_watch",
+      "term": "最近非常压抑"
+    },
+    {
+      "id": "SFR-0008",
+      "op": "exception",
+      "category": "self_harm_expr",
+      "term": "小说"
+    },
+    {
+      "id": "SFR-0009",
+      "op": "exception",
+      "category": "low_mood_watch",
+      "term": "小说"
+    },
+    {
+      "id": "SFR-0010",
+      "op": "phrase",
+      "category": "grief_watch",
+      "term": "总是想起去世的家人"
+    },
+    {
+      "id": "SFR-0011",
+      "op": "token",
+      "category": "grief_watch",
+      "terms": [
+        "always",
+        "feel",
+        "overwhelmed"
+      ]
+    },
+    {
+      "id": "SFR-0012",
+      "op": "regex",
+      "category": "grief_watch",
+      "term": "(?:连续|一直)失眠(?:很多天|好几周)?"
+    }
+  ],
+  "responses": {
+    "care_general": {
+      "zh": "我注意到您好像遇到了很难的事情，您的安全对我们最重要。请随时联系酒店前台；如果您愿意，也可以拨打心理援助热线12385聊一聊，紧急情况请拨打120。",
+      "en": "I notice something may be weighing on you, and your safety matters most to us. Please feel free to contact the hotel front desk at any time. If you would like to talk, you can call the psychological support helpline 12385; in an emergency please call 120."
+    },
+    "warm_suggest": {
+      "zh": "听起来您最近有些辛苦。如果需要，我可以为您联系前台安排帮助，希望您能好好休息一下。",
+      "en": "It sounds like things have been tough lately. If you would like, I can ask the front desk to arrange some support for you. Hope you can get some good rest."
+    },
+    "grief_support": {
+      "zh": "听到这些我很心疼。失去重要的人是非常难受的事，如果愿意，我可以为您联系前台安排人陪您聊聊，或者帮您找一个安静的地方休息。",
+      "en": "I am so sorry to hear this. Losing someone important is very hard. If you would like, I can ask the front desk to arrange someone to talk with you, or help you find a quiet place to rest."
+    }
+  },
+  "examples_positive": [
+    "我不想活了",
+    "我想消失，永远不再回来",
+    "我是别人的负担",
+    "I want to disappear forever",
+    "I am planning to disappear next week",
+    "life is not worth living anymore",
+    "我最近很压抑，睡不好",
+    "最近总是想起去世的家人，心里空落落的",
+    "I always feel overwhelmed at work these days",
+    "连续失眠很多天，整个人很疲惫"
+  ],
+  "examples_negative": [
+    "这本小说的主角说自己不想存在了",
+    "我想预约高楼层安静一点的房间",
+    "Can you take my luggage to the lobby?"
+  ]
+}

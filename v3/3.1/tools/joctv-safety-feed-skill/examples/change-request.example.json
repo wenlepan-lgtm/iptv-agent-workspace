@@ -1,0 +1,56 @@
+{
+  "schema_version": "joctv-safety-feed-change-v1",
+  "base_source_sha256": "FILLED_BY_RUNNER",
+  "base_sequence": 1,
+  "next_sequence": 2,
+  "next_version": "2026.09.02-2",
+  "reason": "示例：新增丧亲关注类别（短语/token/受限正则各一条），收紧情绪低落短语，删除过宽 token 规则",
+  "operations": [
+    {
+      "op": "add_response",
+      "ref": "grief_support",
+      "zh": "听到这些我很心疼。失去重要的人是非常难受的事，如果愿意，我可以为您联系前台安排人陪您聊聊，或者帮您找一个安静的地方休息。",
+      "en": "I am so sorry to hear this. Losing someone important is very hard. If you would like, I can ask the front desk to arrange someone to talk with you, or help you find a quiet place to rest."
+    },
+    {
+      "op": "add_category",
+      "category": {
+        "code": "grief_watch",
+        "name_zh": "丧亲与哀伤关注（示例）",
+        "name_en": "Grief and loss watch (example)",
+        "action": "warn",
+        "reply_ref": "grief_support"
+      }
+    },
+    {
+      "op": "add_rule",
+      "rule": {"id": "SFR-0010", "op": "phrase", "category": "grief_watch", "term": "总是想起去世的家人"}
+    },
+    {
+      "op": "add_rule",
+      "rule": {"id": "SFR-0011", "op": "token", "category": "grief_watch", "terms": ["always", "feel", "overwhelmed"]}
+    },
+    {
+      "op": "add_rule",
+      "rule": {"id": "SFR-0012", "op": "regex", "category": "grief_watch", "term": "(?:连续|一直)失眠(?:很多天|好几周)?"}
+    },
+    {
+      "op": "modify_rule",
+      "id": "SFR-0006",
+      "patch": {"term": "最近非常压抑"}
+    },
+    {
+      "op": "delete_rule",
+      "id": "SFR-0007"
+    },
+    {
+      "op": "add_examples",
+      "kind": "positive",
+      "inputs": [
+        "最近总是想起去世的家人，心里空落落的",
+        "I always feel overwhelmed at work these days",
+        "连续失眠很多天，整个人很疲惫"
+      ]
+    }
+  ]
+}

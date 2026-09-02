@@ -6642,15 +6642,16 @@ AI 辅助抽取为结构化规则
 包结构：
 
 ```text
-manifest.json
-rules.jsonl.zst
-responses.json
-tests/positive.jsonl.zst
-tests/negative.jsonl.zst
-signature.ed25519
+manifest.json              # schema/sequence/version/published_at/engine_compat/
+                           # files(name,size,sha256)/sig_alg=ed25519 + Ed25519 签名
+                           # (签名内嵌于 manifest, canonical JSON, 覆盖除 signature 外全部字段)
+rules.jsonl.zst            # joctv.safety-rule.v1 JSONL (zstd 压缩)
+responses.json             # 恢复话术引用表 {ref: {zh, en}}
+examples.positive.jsonl    # 独立正例 (必须被平台基线或本包拦截)
+examples.negative.jsonl    # 独立负例 (必须两侧都放行)
 ```
 
-Manifest至少绑定 `schema_version / bundle_id / version / sequence / created_at / min_gateway_version / max_gateway_version / rule_count / category_counts / files(size,sha256) / signing_key_id / signature`。`sequence`单调递增防降级；Ed25519公钥随可信后台版本预置并支持受控轮换，下载响应本身不能提供新的信任根。
+Manifest绑定 `schema / sequence / version / published_at / engine_compat(feed_schema,min_engine_version) / files(size,sha256) / sig_alg / signature`。`sequence`单调递增防降级；Ed25519公钥只来自本机受控环境（`JOCTV_SAFETY_FEED_PUBKEY`），下载响应本身不能提供新的信任根。
 
 规则采用 `joctv.safety-rule.v1` JSONL，每条包含稳定 `rule_id/revision/category/severity/languages/priority/input_scope/normalization/match/action/response_id/enabled/validity/tags`。`match`只允许短语、token集合、受限安全模式和例外条件；禁止任意代码、任意回溯正则、外部命令或URL。回复模板与规则分离并由 `response_id` 引用，同包校验语言完整性。
 
@@ -6682,6 +6683,26 @@ Updater保留验收用 `--dry-run`：允许完成授权、Manifest、签名、Sc
 运行时把归一化短语编译为多模式匹配索引（Aho-Corasick/Trie等），token条件、例外和受限模式分别编译；生成不可变 `SafetyMatcherSnapshot`。Gateway每个请求只读取一次当前快照引用，不访问HTTP/PostgreSQL；更新通过原子引用交换，新请求立即生效，旧请求自然完成后释放旧快照。重启从ArtifactStore当前指针恢复并再次验证校验和。PostgreSQL只保存元数据、storage_key、状态、规则统计、审计和Runtime ACK。
 
 输入来源门优先确定 `trusted_human_utterance`：无唤醒词媒体污染先丢弃，再对可信真人输入执行Safety；已验证唤醒词的BARGE_IN自伤表达必须在任何工具动作前阻断。该顺序属于规则包外的不可变平台执行策略，不能由远程规则更新改变。
+
+### 28.3.2 公司工作站规则包生成 Skill（joctv-safety-feed-skill）
+
+规则包的编写与演进只发生在**公司工作站**，酒店服务器不安装任何编码 Agent。工作站使用 `v3/3.1/tools/joctv-safety-feed-skill/`（版本 `VERSION` 文件，源码备份于既有授权 GitHub 仓库，禁止提交私钥/凭据/客户数据）从「上一完整版本源文件 + 机器可读变更请求」生成「下一完整版本源文件 + 变更摘要 + SHA256 sidecar」：
+
+```text
+joctv-safety-feed-src-v1 源文件 = 版本信封(schema_version/sequence/version/
+  prev_source_sha256) + 内容五键(categories/rules/responses/examples_*)
+生成器  scripts/generate_feed_version.py  import | generate   (确定性, fail-closed)
+校验器  scripts/validate_feed_source.py [--prev] [--summary]  (纯标准库)
+测试    scripts/test_validate_feed_source.py (轻量门) +
+        scripts/test_feed_skill_e2e.py (真实消费者链路门)
+```
+
+与运行时协议的一致性由同源校验保证，而不是靠人工对照：
+
+- 输出永远是**完整版本**而非增量补丁；相同输入与配置产生字节等价结果；生成失败零输出、旧版输入文件不被修改。
+- 生成侧确定性校验与后台消费者同一套约束：`sequence` 恰为上一版 +1、`version` 必须变化、`prev_source_sha256` 构成版本链、规则 `SFR-*` id 稳定且唯一、操作符白名单（phrase/regex/token/exception）、受限正则静态安全策略、block/escalate 必须有双语恢复话术、类别码不得碰撞平台内置类别（镜像冻结清单，E2E 门断言与运行时集合一致）、危险空值与重复/冲突拒绝、变更摘要与实际差异逐集合比对（未声明改动拒绝）、新增 phrase/token 规则必须有正例覆盖。
+- 源文件内容五键与冻结打包工具 `p4_admin/tools/safety_feed_build.py` 的输入同构（信封键被该工具忽略），因此 Skill 不修改 `joctv.safety-feed.v1` / `joctv.safety-rule.v1` 冻结 Schema；打包工具自校验与后台「检查更新并应用」走同一份消费者代码，构建通过即后台验证可接受。
+- Ed25519 私钥只存在于工作站受控路径（仓库外，0600）；GitHub 备份只含 Skill 源码、Schema、脱敏示例与测试。
 
 示例：
 

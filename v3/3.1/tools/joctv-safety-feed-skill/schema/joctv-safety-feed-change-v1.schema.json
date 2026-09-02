@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "joctv-safety-feed-change-v1",
+  "title": "JOCTV 安全规则库变更请求 V1",
+  "description": "公司工作站 Skill 的机器可读变更请求。操作集封闭; 同一请求内每个目标 (规则 id/类别码/回复 ref) 只能触碰一次。业务域校验 (版本递增、base 哈希绑定、稳定 ID、恢复话术、正例覆盖、重复/冲突) 由 scripts/generate_feed_version.py 在生成时强制执行。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "base_source_sha256", "base_sequence", "next_sequence", "next_version", "operations"],
+  "properties": {
+    "schema_version": {"const": "joctv-safety-feed-change-v1"},
+    "base_source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "base_sequence": {"type": "integer", "minimum": 1},
+    "next_sequence": {"type": "integer", "minimum": 2},
+    "next_version": {"type": "string", "minLength": 1},
+    "reason": {"type": "string"},
+    "operations": {
+      "type": "array", "minItems": 1,
+      "items": {"oneOf": [
+        {"$ref": "#/definitions/add_rule"},
+        {"$ref": "#/definitions/modify_rule"},
+        {"$ref": "#/definitions/delete_rule"},
+        {"$ref": "#/definitions/add_category"},
+        {"$ref": "#/definitions/modify_category"},
+        {"$ref": "#/definitions/delete_category"},
+        {"$ref": "#/definitions/add_response"},
+        {"$ref": "#/definitions/modify_response"},
+        {"$ref": "#/definitions/delete_response"},
+        {"$ref": "#/definitions/examples"}
+      ]}
+    }
+  },
+  "definitions": {
+    "add_rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "rule"],
+      "properties": {
+        "op": {"const": "add_rule"},
+        "rule": {"$ref": "joctv-safety-feed-src-v1#/rules/items"}
+      }
+    },
+    "modify_rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "id", "patch"],
+      "properties": {
+        "op": {"const": "modify_rule"},
+        "id": {"type": "string", "pattern": "^SFR-[A-Za-z0-9_\\-]{1,40}$"},
+        "patch": {"type": "object", "minProperties": 1,
+                  "additionalProperties": false,
+                  "properties": {"category": {"type": "string"},
+                                  "term": {"type": "string"},
+                                  "terms": {"type": "array", "minItems": 1,
+                                            "maxItems": 8,
+                                            "items": {"type": "string"}}}}
+      }
+    },
+    "delete_rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "id"],
+      "properties": {"op": {"const": "delete_rule"},
+                      "id": {"type": "string", "pattern": "^SFR-[A-Za-z0-9_\\-]{1,40}$"}}
+    },
+    "add_category": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "category"],
+      "properties": {
+        "op": {"const": "add_category"},
+        "category": {"$ref": "joctv-safety-feed-src-v1#/categories/items"}
+      }
+    },
+    "modify_category": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "code", "patch"],
+      "properties": {
+        "op": {"const": "modify_category"},
+        "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"},
+        "patch": {"type": "object", "minProperties": 1,
+                  "additionalProperties": false,
+                  "properties": {"name_zh": {"type": "string"},
+                                  "name_en": {"type": "string"},
+                                  "action": {"enum": ["block", "escalate", "warn"]},
+                                  "reply_ref": {"type": ["string", "null"]}}}
+      }
+    },
+    "delete_category": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "code"],
+      "properties": {"op": {"const": "delete_category"},
+                      "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"}}
+    },
+    "add_response": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "ref", "zh", "en"],
+      "properties": {
+        "op": {"const": "add_response"},
+        "ref": {"type": "string", "pattern": "^[a-z0-9_]{1,64}$"},
+        "zh": {"type": "string", "minLength": 1},
+        "en": {"type": "string", "minLength": 1}
+      }
+    },
+    "modify_response": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "ref", "patch"],
+      "properties": {
+        "op": {"const": "modify_response"},
+        "ref": {"type": "string", "pattern": "^[a-z0-9_]{1,64}$"},
+        "patch": {"type": "object", "minProperties": 1,
+                  "additionalProperties": false,
+                  "properties": {"zh": {"type": "string"},
+                                  "en": {"type": "string"}}}
+      }
+    },
+    "delete_response": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "ref"],
+      "properties": {"op": {"const": "delete_response"},
+                      "ref": {"type": "string", "pattern": "^[a-z0-9_]{1,64}$"}}
+    },
+    "examples": {
+      "type": "object", "additionalProperties": false,
+      "required": ["op", "kind", "inputs"],
+      "properties": {
+        "op": {"enum": ["add_examples", "delete_examples"]},
+        "kind": {"enum": ["positive", "negative"]},
+        "inputs": {"type": "array", "minItems": 1,
+                    "items": {"type": "string", "minLength": 2, "maxLength": 400}}
+      }
+    }
+  }
+}

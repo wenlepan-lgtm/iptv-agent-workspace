@@ -1,0 +1,57 @@
+{
+  "schema_version": "joctv-safety-feed-src-v1",
+  "sequence": 1,
+  "version": "2026.09.02-1",
+  "prev_source_sha256": null,
+  "categories": [
+    {
+      "code": "self_harm_expr",
+      "name_zh": "自伤扩展表达（示例）",
+      "name_en": "Extended self-harm expressions (example)",
+      "action": "block",
+      "reply_ref": "care_general"
+    },
+    {
+      "code": "low_mood_watch",
+      "name_zh": "情绪低落关注（示例）",
+      "name_en": "Low mood watch (example)",
+      "action": "warn",
+      "reply_ref": "warm_suggest"
+    }
+  ],
+  "rules": [
+    {"id": "SFR-0001", "op": "phrase", "category": "self_harm_expr", "term": "我想消失"},
+    {"id": "SFR-0002", "op": "phrase", "category": "self_harm_expr", "term": "我是别人的负担"},
+    {"id": "SFR-0003", "op": "phrase", "category": "self_harm_expr", "term": "i want to disappear"},
+    {"id": "SFR-0004", "op": "regex", "category": "self_harm_expr", "term": "(?:wanna|want|going)to(?:dis)?appear"},
+    {"id": "SFR-0005", "op": "token", "category": "self_harm_expr", "terms": ["not", "worth", "living"]},
+    {"id": "SFR-0006", "op": "phrase", "category": "low_mood_watch", "term": "最近很压抑"},
+    {"id": "SFR-0007", "op": "token", "category": "low_mood_watch", "terms": ["so", "tired", "living"]},
+    {"id": "SFR-0008", "op": "exception", "category": "self_harm_expr", "term": "小说"},
+    {"id": "SFR-0009", "op": "exception", "category": "low_mood_watch", "term": "小说"}
+  ],
+  "responses": {
+    "care_general": {
+      "zh": "我注意到您好像遇到了很难的事情，您的安全对我们最重要。请随时联系酒店前台；如果您愿意，也可以拨打心理援助热线12385聊一聊，紧急情况请拨打120。",
+      "en": "I notice something may be weighing on you, and your safety matters most to us. Please feel free to contact the hotel front desk at any time. If you would like to talk, you can call the psychological support helpline 12385; in an emergency please call 120."
+    },
+    "warm_suggest": {
+      "zh": "听起来您最近有些辛苦。如果需要，我可以为您联系前台安排帮助，希望您能好好休息一下。",
+      "en": "It sounds like things have been tough lately. If you would like, I can ask the front desk to arrange some support for you. Hope you can get some good rest."
+    }
+  },
+  "examples_positive": [
+    "我不想活了",
+    "我想消失，永远不再回来",
+    "我是别人的负担",
+    "I want to disappear forever",
+    "I am planning to disappear next week",
+    "life is not worth living anymore",
+    "我最近很压抑，睡不好"
+  ],
+  "examples_negative": [
+    "这本小说的主角说自己不想存在了",
+    "我想预约高楼层安静一点的房间",
+    "Can you take my luggage to the lobby?"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "joctv-safety-feed-src-v1",
+  "title": "JOCTV 安全规则库版本化源文件 V1",
+  "description": "公司工作站 Skill 的完整版本源文件。信封四键管理版本链; 内容五键与 p4_admin/tools/safety_feed_build.py 的 SRC 输入同构 (打包工具忽略信封键), 不修改 V26_06 冻结的 joctv.safety-feed.v1 / joctv.safety-rule.v1 Schema。确定性校验由 scripts/validate_feed_source.py 执行 (本文件是人类可读的结构总览, 业务域白名单/内置类别碰撞/正则策略/正例覆盖等以校验器为准)。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sequence", "version", "prev_source_sha256", "categories", "rules", "responses", "examples_positive", "examples_negative"],
+  "properties": {
+    "schema_version": {"const": "joctv-safety-feed-src-v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "version": {"type": "string", "minLength": 1},
+    "prev_source_sha256": {"type": ["null", "string"], "pattern": "^[0-9a-f]{64}$"},
+    "categories": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["code", "name_zh", "name_en", "action", "reply_ref"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"},
+          "name_zh": {"type": "string", "minLength": 1},
+          "name_en": {"type": "string", "minLength": 1},
+          "action": {"enum": ["block", "escalate", "warn"]},
+          "reply_ref": {"type": ["string", "null"], "pattern": "^[a-z0-9_]{1,64}$"}
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "op"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^SFR-[A-Za-z0-9_\\-]{1,40}$"},
+          "op": {"enum": ["phrase", "regex", "token", "exception"]},
+          "category": {"type": "string"},
+          "term": {"type": "string", "minLength": 2, "maxLength": 128},
+          "terms": {"type": "array", "minItems": 1, "maxItems": 8,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 48}}
+        }
+      }
+    },
+    "responses": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9_]{1,64}$"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["zh", "en"],
+        "properties": {"zh": {"type": "string", "minLength": 1},
+                        "en": {"type": "string", "minLength": 1}}
+      }
+    },
+    "examples_positive": {"$ref": "#/definitions/exampleList"},
+    "examples_negative": {"$ref": "#/definitions/exampleList"}
+  },
+  "definitions": {
+    "exampleList": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 2, "maxLength": 400}
+    }
+  }
+}
