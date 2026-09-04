@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "joctv-hotel-utterance-v1.schema.json",
+  "title": "JOCTV Hotel Utterance Coverage Corpus V1",
+  "description": "酒店知识问法覆盖语料契约 (Skill 1.2.0)。问法(utterance)是宾客表达, 不是答案: 绑定三分类 — entry=条目已发布该 intent 对应字段事实; clarify=问法点名条目但该字段事实未发布(运行时走缺字段安全兜底/确定性澄清, 不得从其他条目借事实); no_fact=知识库外主题(未知安全兜底)。语言隔离; 禁止携带事实值(时间/电话/价格数字)。生成、校验、评测三段全部确定性可复跑。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "skill_version", "hotel_id", "source_package_name", "source_package_sha256", "seed", "variant_terms", "counts", "utterances"],
+  "properties": {
+    "schema_version": {"const": "joctv-hotel-utterance-v1"},
+    "skill_version": {"type": "string", "minLength": 1, "maxLength": 16},
+    "hotel_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "source_package_name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "source_package_sha256": {
+      "type": "string", "pattern": "^[0-9a-f]{64}$",
+      "description": "源知识包文件 SHA-256; 校验器必须重算比对, 防止语料与知识源脱钩。"
+    },
+    "seed": {"type": "integer", "minimum": 0},
+    "variant_terms": {
+      "type": "object",
+      "description": "每条目每语言的新增同义称呼(增强别名的唯一来源)。键=entry id 字符串。",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["zh", "en"],
+        "additionalProperties": false,
+        "properties": {
+          "zh": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 2, "maxLength": 8}},
+          "en": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 3, "maxLength": 24}}
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "zh", "en", "entry_bound", "clarify", "no_fact"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 1},
+        "zh": {"type": "integer", "minimum": 0},
+        "en": {"type": "integer", "minimum": 0},
+        "entry_bound": {"type": "integer", "minimum": 0},
+        "clarify": {"type": "integer", "minimum": 0},
+        "no_fact": {"type": "integer", "minimum": 0}
+      }
+    },
+    "utterances": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "lang", "text", "binding", "entry_id", "category", "intent", "field", "term_kind"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "lang": {"enum": ["zh", "en"]},
+          "text": {"type": "string", "minLength": 3, "maxLength": 96},
+          "binding": {"enum": ["entry", "clarify", "no_fact"]},
+          "entry_id": {
+            "type": ["integer", "null"],
+            "description": "binding=entry/clarify 时为源知识包条目 id; no_fact 时必须为 null。"
+          },
+          "category": {
+            "type": ["string", "null"], "maxLength": 16,
+            "description": "binding=entry/clarify 时与源条目 category 一致; no_fact 时为 null。"
+          },
+          "intent": {"enum": ["time", "location", "directions", "phone", "price", "policy", "booking", "availability", "overview"]},
+          "field": {"enum": ["time", "location", "directions", "phone", "notes", "overview", "none"]},
+          "term_kind": {"enum": ["base", "variant"], "description": "称呼来源: base=源信号词(topic/keyword), variant=新增同义称呼。"}
+        }
+      }
+    }
+  }
+}

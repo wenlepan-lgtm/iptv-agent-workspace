@@ -1,0 +1,989 @@
+{
+  "version": 1,
+  "description": "JOCTV 酒店问法覆盖生成资源: 通用酒店意图本体(9 intents × 字段映射) + 中英自然句式模板 + 同义称呼词典(variant_lexicon, 增强别名的唯一来源) + NO_FACT 主题。所有内容为通用酒店域表达, 不含任何酒店事实; 事实只来自输入知识包。",
+  "intent_fields": {
+    "time": "time",
+    "location": "location",
+    "directions": "directions",
+    "phone": "phone",
+    "price": "notes",
+    "policy": "notes",
+    "booking": "notes",
+    "availability": "overview",
+    "overview": "overview"
+  },
+  "prefixes": {
+    "zh": [
+      "",
+      "请问",
+      "麻烦问一下",
+      "想问一下",
+      "我想了解下",
+      "不好意思问下",
+      "帮我查一下",
+      "咨询一下"
+    ],
+    "en": [
+      "",
+      "excuse me, ",
+      "hi, ",
+      "hey, ",
+      "may i ask ",
+      "could you tell me ",
+      "i'd like to know ",
+      "do you know ",
+      "just wondering "
+    ]
+  },
+  "suffixes": {
+    "zh": [
+      "",
+      "呢",
+      "啊",
+      "呀",
+      "谢谢",
+      "多谢"
+    ],
+    "en": [
+      "",
+      "please",
+      "thanks",
+      "thank you"
+    ]
+  },
+  "question_term_filter_zh": [
+    "哪",
+    "什么",
+    "怎么",
+    "几",
+    "吗",
+    "如何"
+  ],
+  "verb_start_chars_zh": [
+    "吃",
+    "订",
+    "做",
+    "带",
+    "洗",
+    "玩",
+    "住",
+    "游",
+    "逛",
+    "熨",
+    "结",
+    "开",
+    "锻",
+    "近",
+    "允许"
+  ],
+  "question_term_filter_en": [
+    "how",
+    "where",
+    "what",
+    "when",
+    "who",
+    "which",
+    "why",
+    "nearby"
+  ],
+  "verb_start_words_en": [
+    "eat",
+    "do",
+    "play",
+    "swim",
+    "book",
+    "hold",
+    "bring",
+    "get",
+    "pick"
+  ],
+  "generic_terms": {
+    "zh": [
+      "酒店",
+      "前台",
+      "这里",
+      "你们",
+      "服务",
+      "地方",
+      "东西",
+      "那个",
+      "酒店概览"
+    ],
+    "en": [
+      "hotel",
+      "front desk",
+      "here",
+      "service",
+      "place",
+      "thing",
+      "overview",
+      "the hotel",
+      "everything",
+      "facility"
+    ]
+  },
+  "generic_scope_aliases": {
+    "zh": [
+      "酒店",
+      "酒店介绍",
+      "酒店概览",
+      "朗廷",
+      "新天地朗廷",
+      "附近玩",
+      "位置",
+      "在哪",
+      "地址",
+      "怎么去酒店"
+    ],
+    "en": [
+      "hotel",
+      "overview",
+      "hotel overview",
+      "langham",
+      "the langham",
+      "nearby",
+      "the hotel"
+    ]
+  },
+  "variant_lexicon": {
+    "zh": {
+      "早餐": [
+        "早饭",
+        "早点"
+      ],
+      "吃早餐": [
+        "吃早饭",
+        "吃早点"
+      ],
+      "自助早餐": [
+        "早餐自助"
+      ],
+      "全日餐厅": [
+        "全日制餐厅"
+      ],
+      "客房": [
+        "住房"
+      ],
+      "订房": [
+        "订房间"
+      ],
+      "套房": [
+        "套间"
+      ],
+      "主席套房": [
+        "主席套间"
+      ],
+      "最大的套房": [
+        "最大的套间"
+      ],
+      "中餐厅": [
+        "中餐馆"
+      ],
+      "粤菜": [
+        "粤菜馆",
+        "广东菜"
+      ],
+      "唐阁": [
+        "唐阁餐厅"
+      ],
+      "米其林": [
+        "米其林餐厅"
+      ],
+      "露天餐厅": [
+        "露天用餐区"
+      ],
+      "户外餐厅": [
+        "室外餐厅"
+      ],
+      "下午茶": [
+        "英式茶"
+      ],
+      "英式下午茶": [
+        "英式茶"
+      ],
+      "大堂酒廊": [
+        "大堂酒吧"
+      ],
+      "大堂吧": [
+        "大堂酒吧"
+      ],
+      "新吧": [
+        "新吧酒吧"
+      ],
+      "朗廷会": [
+        "会员会所"
+      ],
+      "行政酒廊": [
+        "行政楼层酒廊"
+      ],
+      "行政礼遇": [
+        "会所礼遇"
+      ],
+      "朗廷": [
+        "朗廷酒店"
+      ],
+      "酒店介绍": [
+        "酒店情况"
+      ],
+      "水疗": [
+        "水疗中心",
+        "spa中心"
+      ],
+      "按摩": [
+        "推拿",
+        "按摩理疗"
+      ],
+      "川水疗": [
+        "川水疗中心"
+      ],
+      "做spa": [
+        "做水疗"
+      ],
+      "水疗预约": [
+        "spa预约"
+      ],
+      "取消预约": [
+        "取消水疗",
+        "水疗退订"
+      ],
+      "水疗政策": [
+        "spa政策"
+      ],
+      "健身房": [
+        "健身中心"
+      ],
+      "健身室": [
+        "健身房间"
+      ],
+      "锻炼": [
+        "运动锻炼"
+      ],
+      "游泳池": [
+        "游泳馆",
+        "室内泳池"
+      ],
+      "泳池": [
+        "泳池馆"
+      ],
+      "位置": [
+        "酒店位置"
+      ],
+      "地址": [
+        "酒店地址"
+      ],
+      "地铁": [
+        "地铁站"
+      ],
+      "接机": [
+        "接机服务"
+      ],
+      "送机": [
+        "送机服务"
+      ],
+      "机场": [
+        "机场接送"
+      ],
+      "接送": [
+        "接送服务"
+      ],
+      "景点": [
+        "周边景点",
+        "附近景点"
+      ],
+      "购物": [
+        "购物场所"
+      ],
+      "商场": [
+        "附近商场"
+      ],
+      "洗衣": [
+        "洗衣服务",
+        "干洗"
+      ],
+      "熨烫": [
+        "衣服熨烫"
+      ],
+      "一次性用品": [
+        "客用一次性用品"
+      ],
+      "牙刷": [
+        "牙膏牙刷"
+      ],
+      "拖鞋": [
+        "一次性拖鞋"
+      ],
+      "宠物": [
+        "小狗",
+        "小猫"
+      ],
+      "带宠物入住": [
+        "带狗入住"
+      ],
+      "宠物友好": [
+        "允许宠物"
+      ],
+      "会议": [
+        "会议室"
+      ],
+      "宴会": [
+        "宴会场地"
+      ],
+      "婚宴": [
+        "婚宴场地",
+        "办婚宴"
+      ],
+      "婚礼": [
+        "办婚礼"
+      ],
+      "婚宴厅": [
+        "婚礼厅"
+      ]
+    },
+    "en": {
+      "breakfast": [
+        "brekkie"
+      ],
+      "all day dining": [
+        "all day restaurant"
+      ],
+      "rooms": [
+        "guest rooms"
+      ],
+      "room types": [
+        "room categories"
+      ],
+      "suites": [
+        "suite rooms"
+      ],
+      "chairman suite": [
+        "chairman suites"
+      ],
+      "cantonese": [
+        "cantonese restaurant"
+      ],
+      "chinese restaurant": [
+        "chinese dining"
+      ],
+      "michelin": [
+        "michelin starred restaurant"
+      ],
+      "al fresco": [
+        "alfresco dining"
+      ],
+      "outdoor dining": [
+        "outdoor seating"
+      ],
+      "outdoor cafe": [
+        "outdoor terrace"
+      ],
+      "afternoon tea": [
+        "tea time",
+        "english tea"
+      ],
+      "english afternoon tea": [
+        "english tea"
+      ],
+      "lobby lounge": [
+        "lobby bar"
+      ],
+      "xtd elevated": [
+        "xtd bar"
+      ],
+      "private party": [
+        "private events"
+      ],
+      "langham club": [
+        "club floor"
+      ],
+      "club lounge": [
+        "club floor lounge"
+      ],
+      "executive lounge": [
+        "executive floor lounge"
+      ],
+      "langham": [
+        "langham hotel"
+      ],
+      "spa": [
+        "the spa",
+        "spa treatments"
+      ],
+      "chuan spa": [
+        "chuan spa centre"
+      ],
+      "spa booking": [
+        "spa reservation"
+      ],
+      "cancellation": [
+        "spa cancellation"
+      ],
+      "spa policy": [
+        "spa rules"
+      ],
+      "gym": [
+        "workout room",
+        "gym room"
+      ],
+      "fitness": [
+        "fitness room"
+      ],
+      "pool": [
+        "the pool",
+        "swimming area"
+      ],
+      "swimming pool": [
+        "indoor pool"
+      ],
+      "location": [
+        "hotel location"
+      ],
+      "address": [
+        "hotel address"
+      ],
+      "metro": [
+        "metro station",
+        "subway"
+      ],
+      "airport transfer": [
+        "airport pickup",
+        "airport drop off"
+      ],
+      "limousine": [
+        "limo service"
+      ],
+      "pick up": [
+        "pick up service"
+      ],
+      "attractions": [
+        "nearby attractions",
+        "sights"
+      ],
+      "shopping": [
+        "shopping areas"
+      ],
+      "mall": [
+        "shopping mall",
+        "malls nearby"
+      ],
+      "laundry": [
+        "laundry service",
+        "washing service"
+      ],
+      "pressing": [
+        "ironing service"
+      ],
+      "amenities": [
+        "room amenities"
+      ],
+      "toothbrush": [
+        "toothpaste"
+      ],
+      "disposable": [
+        "disposable amenities"
+      ],
+      "pet friendly": [
+        "pets allowed"
+      ],
+      "meeting": [
+        "meeting rooms"
+      ],
+      "conference": [
+        "conference rooms"
+      ],
+      "event": [
+        "event space"
+      ],
+      "wedding": [
+        "wedding venue"
+      ],
+      "banquet": [
+        "banquet hall"
+      ]
+    }
+  },
+  "no_fact_topics": {
+    "zh": [
+      "电影院",
+      "游戏室",
+      "棋牌室",
+      "麻将室",
+      "桑拿房",
+      "蒸汽房",
+      "瑜伽课",
+      "网球场",
+      "高尔夫球场",
+      "溜冰场",
+      "儿童乐园",
+      "托管服务",
+      "宠物寄养",
+      "美容院",
+      "理发店",
+      "药店",
+      "医务室",
+      "取款机",
+      "货币兑换",
+      "快递代收",
+      "商务中心",
+      "打印服务",
+      "传真服务",
+      "翻译服务",
+      "擦鞋服务",
+      "鲜花店",
+      "蛋糕店",
+      "便利店",
+      "自动售货机",
+      "充电宝租借",
+      "自行车租赁",
+      "滑雪场",
+      "室内高尔夫",
+      "桌游室",
+      "充电桩"
+    ],
+    "en": [
+      "cinema",
+      "arcade",
+      "game room",
+      "sauna",
+      "steam room",
+      "yoga class",
+      "tennis court",
+      "golf course",
+      "ice rink",
+      "kids club",
+      "babysitting",
+      "pet daycare",
+      "hair salon",
+      "pharmacy",
+      "clinic",
+      "cash machine",
+      "currency exchange",
+      "mail holding",
+      "business centre",
+      "printing service",
+      "fax service",
+      "interpreter service",
+      "shoe shine",
+      "flower shop",
+      "cake shop",
+      "convenience store",
+      "vending machine",
+      "power bank rental",
+      "bike hire",
+      "ski slope",
+      "golf simulator",
+      "board games",
+      "ev charging"
+    ]
+  },
+  "no_fact_intents": [
+    "time",
+    "location",
+    "price",
+    "availability",
+    "policy",
+    "booking"
+  ],
+  "intents": {
+    "time": {
+      "zh": {
+        "N": [
+          "{t}几点开门",
+          "{t}什么时候营业",
+          "{t}的营业时间是几点",
+          "{t}每天开放到几点",
+          "{t}几点到几点开门",
+          "{t}营业到晚上几点",
+          "{t}中午开不开门",
+          "{t}的开放时间",
+          "{t}现在开着吗",
+          "{t}几点关门",
+          "{t}到几点结束",
+          "{t}周六日开不开",
+          "{t}节假日营业吗",
+          "{t}早上几点可以进",
+          "晚上还能去{t}吗",
+          "告诉我{t}的营业时间",
+          "{t}的开门时间说一下",
+          "几点可以去{t}",
+          "{t}是不是全天开放",
+          "{t}中午休息吗"
+        ],
+        "V": [
+          "{v}几点开始",
+          "{v}到几点可以",
+          "什么时间能{v}",
+          "{v}晚上可以吗"
+        ]
+      },
+      "en": {
+        "N": [
+          "what time does {t} open",
+          "when is {t} open",
+          "what are the opening hours of {t}",
+          "what time does {t} close",
+          "is {t} open all day",
+          "what time can i use {t}",
+          "does {t} open on weekends",
+          "is {t} open in the morning",
+          "what are the hours for {t}",
+          "until what time is {t} open",
+          "does {t} close early",
+          "is {t} open right now",
+          "what time does {t} start",
+          "when does {t} shut",
+          "can i use {t} late at night",
+          "tell me the opening hours of {t}",
+          "is {t} open on holidays",
+          "what time does {t} open in the morning"
+        ]
+      }
+    },
+    "location": {
+      "zh": {
+        "N": [
+          "{t}在哪里",
+          "{t}在几楼",
+          "{t}的具体位置在哪",
+          "哪里有{t}",
+          "{t}位于酒店哪个位置",
+          "{t}在酒店哪个区域",
+          "去哪找{t}",
+          "{t}的位置说一下",
+          "{t}是不是在楼里",
+          "在哪能找到{t}",
+          "{t}挨着哪里",
+          "{t}好找吗",
+          "帮我定位下{t}",
+          "{t}在哪个方位",
+          "{t}离大堂远吗",
+          "怎么找到{t}",
+          "{t}具体在哪一层",
+          "{t}的位置发我一下"
+        ],
+        "V": [
+          "哪里可以{v}",
+          "到哪里{v}比较方便",
+          "{v}的地方在哪"
+        ]
+      },
+      "en": {
+        "N": [
+          "where is {t}",
+          "what floor is {t} on",
+          "where can i find {t}",
+          "is {t} in the main building",
+          "where exactly is {t}",
+          "is {t} near the lobby",
+          "how do i find {t}",
+          "is {t} easy to find",
+          "whereabouts is {t}",
+          "is {t} upstairs or downstairs",
+          "is {t} on the ground floor",
+          "can you show me where {t} is",
+          "is {t} far from my room",
+          "which part of the building is {t} in",
+          "is {t} inside or outside",
+          "where is {t} located"
+        ]
+      }
+    },
+    "directions": {
+      "zh": {
+        "N": [
+          "{t}怎么走",
+          "{t}从大堂怎么去",
+          "去{t}怎么走最近",
+          "{t}在哪个方向",
+          "从房间去{t}方便吗",
+          "{t}要怎么过去",
+          "{t}走路能到吗",
+          "{t}在几楼怎么走",
+          "{t}怎么去比较快",
+          "{t}路线说一下",
+          "从电梯怎么去{t}",
+          "{t}远不远怎么过去",
+          "给我指下{t}的路",
+          "{t}怎么走最近",
+          "坐电梯能到{t}吗"
+        ],
+        "V": [
+          "想去{v}应该往哪走",
+          "要{v}的话怎么过去"
+        ]
+      },
+      "en": {
+        "N": [
+          "how do i get to {t}",
+          "how do i go to {t}",
+          "which way is {t}",
+          "can i walk to {t}",
+          "how do i reach {t} from the lobby",
+          "is there a lift to {t}",
+          "how do i find my way to {t}",
+          "what is the best way to {t}",
+          "how far is {t} from here",
+          "do i take the elevator to {t}",
+          "can you guide me to {t}",
+          "which direction should i go for {t}",
+          "how do i get to {t} from my room"
+        ]
+      }
+    },
+    "phone": {
+      "zh": {
+        "N": [
+          "{t}的电话是多少",
+          "{t}有联系电话吗",
+          "怎么联系{t}",
+          "{t}的客服电话",
+          "{t}前台电话多少",
+          "打哪个电话找{t}",
+          "{t}的座机号码",
+          "{t}联系方式发我一下",
+          "有事怎么电话联系{t}",
+          "能给我{t}的电话吗",
+          "{t}电话多少号"
+        ],
+        "V": [
+          "想{v}打什么电话",
+          "{v}要打电话预约吗"
+        ]
+      },
+      "en": {
+        "N": [
+          "what is the phone number for {t}",
+          "does {t} have a phone number",
+          "how can i contact {t}",
+          "can i call {t} directly",
+          "is there a direct line to {t}",
+          "what number do i dial for {t}",
+          "can you give me the number for {t}",
+          "how do i reach {t} by phone",
+          "does {t} have a contact number",
+          "who do i call about {t}",
+          "may i have the number for {t}"
+        ]
+      }
+    },
+    "price": {
+      "zh": {
+        "N": [
+          "{t}怎么收费",
+          "{t}收费吗",
+          "{t}是免费的吗",
+          "{t}要钱吗",
+          "{t}价格多少",
+          "{t}怎么算钱",
+          "{t}要另外付费吗",
+          "{t}多少钱一次",
+          "{t}有什么费用",
+          "{t}的价格说一下",
+          "{t}要不要押金",
+          "{t}免费还是收费",
+          "用{t}要花多少钱",
+          "{t}怎么计费",
+          "{t}有最低消费吗",
+          "{t}包不包含在房费里"
+        ],
+        "V": [
+          "{v}要收费吗",
+          "{v}怎么算费用",
+          "{v}免费吗"
+        ]
+      },
+      "en": {
+        "N": [
+          "is {t} free",
+          "how much does {t} cost",
+          "does {t} charge a fee",
+          "is there a charge for {t}",
+          "what is the price of {t}",
+          "do i have to pay for {t}",
+          "is {t} included in the room rate",
+          "are there extra charges for {t}",
+          "how much is {t} per visit",
+          "does {t} need a deposit",
+          "is {t} chargeable",
+          "what does {t} cost to use",
+          "is there a minimum spend at {t}",
+          "how is {t} charged"
+        ]
+      }
+    },
+    "policy": {
+      "zh": {
+        "N": [
+          "{t}有什么规定",
+          "{t}有什么限制",
+          "{t}有年龄限制吗",
+          "{t}需要预约吗",
+          "{t}可以预订吗",
+          "{t}要不要提前预约",
+          "{t}有人数限制吗",
+          "{t}有着装要求吗",
+          "{t}的规矩说一下",
+          "{t}有使用须知吗",
+          "{t}要登记吗",
+          "{t}对外开放吗",
+          "{t}小孩能进吗",
+          "{t}是不是只有会员能用",
+          "{t}的政策是怎样的",
+          "用{t}注意什么",
+          "{t}有没有什么要求"
+        ],
+        "V": [
+          "{v}有什么规定",
+          "{v}要预约吗",
+          "{v}有什么要求",
+          "{v}可以直接去吗"
+        ]
+      },
+      "en": {
+        "N": [
+          "does {t} need a reservation",
+          "can i book {t} in advance",
+          "does {t} have any restrictions",
+          "is there a dress code for {t}",
+          "does {t} have an age limit",
+          "do i need to register for {t}",
+          "is {t} open to everyone",
+          "can kids use {t}",
+          "is {t} for members only",
+          "what are the rules for {t}",
+          "does {t} have capacity limits",
+          "can i cancel {t} for free",
+          "are there any requirements for {t}"
+        ]
+      }
+    },
+    "booking": {
+      "zh": {
+        "N": [
+          "{t}怎么预订",
+          "{t}怎么预约",
+          "{t}要提前多久订",
+          "{t}在哪预约",
+          "{t}可以网上预订吗",
+          "{t}预约电话多少",
+          "{t}怎么取消预订",
+          "{t}能改时间吗",
+          "{t}订位怎么订",
+          "{t}要交定金吗",
+          "帮我预约{t}",
+          "{t}预约满了怎么办",
+          "{t}当天能订到吗",
+          "{t}怎么改预约",
+          "{t}预约要注意什么"
+        ],
+        "V": [
+          "想{v}怎么预约",
+          "{v}要提前约吗",
+          "{v}怎么取消"
+        ]
+      },
+      "en": {
+        "N": [
+          "how do i book {t}",
+          "how do i make a reservation for {t}",
+          "how far in advance should i book {t}",
+          "where can i book {t}",
+          "can i reserve {t} online",
+          "how do i cancel my booking for {t}",
+          "can i change my {t} reservation",
+          "do i need a deposit to book {t}",
+          "can i book {t} for today",
+          "who should i ask to book {t}",
+          "how do i amend my booking for {t}",
+          "is it hard to book {t}"
+        ]
+      }
+    },
+    "availability": {
+      "zh": {
+        "N": [
+          "{t}有没有",
+          "酒店有{t}吗",
+          "{t}是开着的吗",
+          "{t}现在营业吗",
+          "{t}还开着吗",
+          "{t}今天开不开",
+          "有没有{t}",
+          "{t}可以用吗",
+          "{t}提供吗",
+          "你们有{t}服务吗",
+          "{t}是不是停了",
+          "{t}坏了在修吗",
+          "{t}开放中吗",
+          "现在能用{t}吗",
+          "{t}还能用吗"
+        ],
+        "V": [
+          "可以{v}吗",
+          "能{v}吗",
+          "现在还能{v}吗",
+          "允许{v}吗"
+        ]
+      },
+      "en": {
+        "N": [
+          "do you have {t}",
+          "is there a {t} here",
+          "is {t} available",
+          "is {t} currently open",
+          "is {t} still open",
+          "is {t} closed today",
+          "can i use {t} at the moment",
+          "is {t} out of service",
+          "is {t} open now",
+          "do you offer {t}",
+          "is {t} working",
+          "has {t} reopened",
+          "is {t} temporarily closed",
+          "may i use {t}"
+        ]
+      }
+    },
+    "overview": {
+      "zh": {
+        "N": [
+          "介绍一下{t}",
+          "{t}怎么样",
+          "{t}好吗",
+          "{t}有什么特别的",
+          "{t}有什么亮点",
+          "推荐一下{t}",
+          "{t}值得去吗",
+          "{t}大概是什么情况",
+          "说说{t}的情况",
+          "{t}有什么讲究",
+          "{t}到底是什么",
+          "{t}能介绍一下吗",
+          "给我讲讲{t}",
+          "{t}有什么内容",
+          "{t}如何",
+          "帮我介绍下{t}",
+          "{t}有什么好处"
+        ],
+        "V": []
+      },
+      "en": {
+        "N": [
+          "tell me about {t}",
+          "what is {t} like",
+          "how is {t}",
+          "what is special about {t}",
+          "would you recommend {t}",
+          "is {t} worth visiting",
+          "what does {t} include",
+          "can you introduce {t}",
+          "what is {t} exactly",
+          "what makes {t} special",
+          "is {t} any good",
+          "what can i expect from {t}",
+          "how would you describe {t}",
+          "tell me more about {t}"
+        ]
+      }
+    }
+  }
+}
