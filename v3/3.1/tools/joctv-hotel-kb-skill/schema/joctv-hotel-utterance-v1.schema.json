@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "joctv-hotel-utterance-v1.schema.json",
   "title": "JOCTV Hotel Utterance Coverage Corpus V1",
-  "description": "酒店知识问法覆盖语料契约 (Skill 1.2.0)。问法(utterance)是宾客表达, 不是答案: 绑定三分类 — entry=条目已发布该 intent 对应字段事实; clarify=问法点名条目但该字段事实未发布(运行时走缺字段安全兜底/确定性澄清, 不得从其他条目借事实); no_fact=知识库外主题(未知安全兜底)。语言隔离; 禁止携带事实值(时间/电话/价格数字)。生成、校验、评测三段全部确定性可复跑。",
+  "description": "酒店知识问法覆盖语料契约 (Skill 1.3.0)。问法(utterance)是宾客表达, 不是答案: 绑定三分类 — entry=条目已发布该 intent 对应字段事实(intent 级判定: price 恒缺字段, policy/booking 需 notes 含对应事实标记); clarify=问法点名条目但该 intent 事实未发布(声明字段缺失时运行时走缺字段安全兜底/确定性澄清, 不得从其他条目借事实、不得以同条目概述/其他字段冒充); no_fact=知识库外主题(未知安全兜底)。语言隔离; 禁止携带事实值(时间/电话/价格数字)。生成、校验、评测三段全部确定性可复跑且共享同一最终路由断言 (kb_router_chain.route_single_turn/route_expectation)。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "skill_version", "hotel_id", "source_package_name", "source_package_sha256", "seed", "variant_terms", "counts", "utterances"],
@@ -62,7 +62,7 @@
             "description": "binding=entry/clarify 时与源条目 category 一致; no_fact 时为 null。"
           },
           "intent": {"enum": ["time", "location", "directions", "phone", "price", "policy", "booking", "availability", "overview"]},
-          "field": {"enum": ["time", "location", "directions", "phone", "notes", "overview", "none"]},
+          "field": {"enum": ["time", "location", "directions", "phone", "price", "notes", "overview"], "description": "intent 的运行时回答字段: price 为独立可问字段(kb-v1 无结构化价格字段, 价格问法一律缺字段安全兜底); policy/booking → notes; availability/overview → overview(概述回答变体)。"},
           "term_kind": {"enum": ["base", "variant"], "description": "称呼来源: base=源信号词(topic/keyword), variant=新增同义称呼。"}
         }
       }

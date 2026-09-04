@@ -1,12 +1,12 @@
 {
-  "version": 1,
-  "description": "JOCTV 酒店问法覆盖生成资源: 通用酒店意图本体(9 intents × 字段映射) + 中英自然句式模板 + 同义称呼词典(variant_lexicon, 增强别名的唯一来源) + NO_FACT 主题。所有内容为通用酒店域表达, 不含任何酒店事实; 事实只来自输入知识包。",
+  "version": 2,
+  "description": "JOCTV 酒店问法覆盖生成资源: 通用酒店意图本体(9 intents × 字段映射) + 中英自然句式模板 + 同义称呼词典(variant_lexicon, 增强别名的唯一来源) + NO_FACT 主题。所有内容为通用酒店域表达, 不含任何酒店事实; 事实只来自输入知识包。V2 (Skill 1.3.0): intent_fields.price 独立为 price 字段(kb-v1 无结构化价格字段, 价格问法一律缺字段安全兜底); 句式模板按'所声明 intent 必须触发网关对应运行时字段'口径修剪(字段冲突/无字段词句式已删除, 详见 SKILL.md 7.2)。",
   "intent_fields": {
     "time": "time",
     "location": "location",
     "directions": "directions",
     "phone": "phone",
-    "price": "notes",
+    "price": "price",
     "policy": "notes",
     "booking": "notes",
     "availability": "overview",
@@ -172,9 +172,6 @@
       ],
       "主席套房": [
         "主席套间"
-      ],
-      "最大的套房": [
-        "最大的套间"
       ],
       "中餐厅": [
         "中餐馆"
@@ -595,24 +592,17 @@
           "{t}营业到晚上几点",
           "{t}中午开不开门",
           "{t}的开放时间",
-          "{t}现在开着吗",
           "{t}几点关门",
           "{t}到几点结束",
-          "{t}周六日开不开",
-          "{t}节假日营业吗",
           "{t}早上几点可以进",
-          "晚上还能去{t}吗",
           "告诉我{t}的营业时间",
           "{t}的开门时间说一下",
-          "几点可以去{t}",
-          "{t}是不是全天开放",
-          "{t}中午休息吗"
+          "几点可以去{t}"
         ],
         "V": [
           "{v}几点开始",
           "{v}到几点可以",
-          "什么时间能{v}",
-          "{v}晚上可以吗"
+          "什么时间能{v}"
         ]
       },
       "en": {
@@ -621,19 +611,12 @@
           "when is {t} open",
           "what are the opening hours of {t}",
           "what time does {t} close",
-          "is {t} open all day",
           "what time can i use {t}",
-          "does {t} open on weekends",
-          "is {t} open in the morning",
           "what are the hours for {t}",
           "until what time is {t} open",
-          "does {t} close early",
-          "is {t} open right now",
           "what time does {t} start",
           "when does {t} shut",
-          "can i use {t} late at night",
           "tell me the opening hours of {t}",
-          "is {t} open on holidays",
           "what time does {t} open in the morning"
         ]
       }
@@ -644,25 +627,14 @@
           "{t}在哪里",
           "{t}在几楼",
           "{t}的具体位置在哪",
-          "哪里有{t}",
           "{t}位于酒店哪个位置",
-          "{t}在酒店哪个区域",
-          "去哪找{t}",
-          "{t}的位置说一下",
-          "{t}是不是在楼里",
           "在哪能找到{t}",
-          "{t}挨着哪里",
-          "{t}好找吗",
-          "帮我定位下{t}",
+          "{t}的位置说一下",
           "{t}在哪个方位",
-          "{t}离大堂远吗",
-          "怎么找到{t}",
           "{t}具体在哪一层",
           "{t}的位置发我一下"
         ],
         "V": [
-          "哪里可以{v}",
-          "到哪里{v}比较方便",
           "{v}的地方在哪"
         ]
       },
@@ -671,18 +643,10 @@
           "where is {t}",
           "what floor is {t} on",
           "where can i find {t}",
-          "is {t} in the main building",
           "where exactly is {t}",
-          "is {t} near the lobby",
-          "how do i find {t}",
-          "is {t} easy to find",
           "whereabouts is {t}",
-          "is {t} upstairs or downstairs",
           "is {t} on the ground floor",
           "can you show me where {t} is",
-          "is {t} far from my room",
-          "which part of the building is {t} in",
-          "is {t} inside or outside",
           "where is {t} located"
         ]
       }
@@ -692,38 +656,23 @@
         "N": [
           "{t}怎么走",
           "{t}从大堂怎么去",
-          "去{t}怎么走最近",
-          "{t}在哪个方向",
-          "从房间去{t}方便吗",
           "{t}要怎么过去",
-          "{t}走路能到吗",
           "{t}在几楼怎么走",
           "{t}怎么去比较快",
           "{t}路线说一下",
           "从电梯怎么去{t}",
-          "{t}远不远怎么过去",
-          "给我指下{t}的路",
-          "{t}怎么走最近",
-          "坐电梯能到{t}吗"
+          "{t}远不远怎么过去"
         ],
         "V": [
-          "想去{v}应该往哪走",
           "要{v}的话怎么过去"
         ]
       },
       "en": {
         "N": [
           "how do i get to {t}",
-          "how do i go to {t}",
           "which way is {t}",
-          "can i walk to {t}",
-          "how do i reach {t} from the lobby",
-          "is there a lift to {t}",
           "how do i find my way to {t}",
           "what is the best way to {t}",
-          "how far is {t} from here",
-          "do i take the elevator to {t}",
-          "can you guide me to {t}",
           "which direction should i go for {t}",
           "how do i get to {t} from my room"
         ]
@@ -734,7 +683,6 @@
         "N": [
           "{t}的电话是多少",
           "{t}有联系电话吗",
-          "怎么联系{t}",
           "{t}的客服电话",
           "{t}前台电话多少",
           "打哪个电话找{t}",
@@ -753,9 +701,7 @@
         "N": [
           "what is the phone number for {t}",
           "does {t} have a phone number",
-          "how can i contact {t}",
           "can i call {t} directly",
-          "is there a direct line to {t}",
           "what number do i dial for {t}",
           "can you give me the number for {t}",
           "how do i reach {t} by phone",
@@ -773,7 +719,6 @@
           "{t}是免费的吗",
           "{t}要钱吗",
           "{t}价格多少",
-          "{t}怎么算钱",
           "{t}要另外付费吗",
           "{t}多少钱一次",
           "{t}有什么费用",
@@ -782,8 +727,7 @@
           "{t}免费还是收费",
           "用{t}要花多少钱",
           "{t}怎么计费",
-          "{t}有最低消费吗",
-          "{t}包不包含在房费里"
+          "{t}有最低消费吗"
         ],
         "V": [
           "{v}要收费吗",
@@ -821,11 +765,8 @@
           "{t}要不要提前预约",
           "{t}有人数限制吗",
           "{t}有着装要求吗",
-          "{t}的规矩说一下",
           "{t}有使用须知吗",
           "{t}要登记吗",
-          "{t}对外开放吗",
-          "{t}小孩能进吗",
           "{t}是不是只有会员能用",
           "{t}的政策是怎样的",
           "用{t}注意什么",
@@ -834,8 +775,7 @@
         "V": [
           "{v}有什么规定",
           "{v}要预约吗",
-          "{v}有什么要求",
-          "{v}可以直接去吗"
+          "{v}有什么要求"
         ]
       },
       "en": {
@@ -846,12 +786,8 @@
           "is there a dress code for {t}",
           "does {t} have an age limit",
           "do i need to register for {t}",
-          "is {t} open to everyone",
-          "can kids use {t}",
           "is {t} for members only",
           "what are the rules for {t}",
-          "does {t} have capacity limits",
-          "can i cancel {t} for free",
           "are there any requirements for {t}"
         ]
       }
@@ -861,23 +797,16 @@
         "N": [
           "{t}怎么预订",
           "{t}怎么预约",
-          "{t}要提前多久订",
-          "{t}在哪预约",
           "{t}可以网上预订吗",
-          "{t}预约电话多少",
           "{t}怎么取消预订",
-          "{t}能改时间吗",
           "{t}订位怎么订",
-          "{t}要交定金吗",
           "帮我预约{t}",
           "{t}预约满了怎么办",
-          "{t}当天能订到吗",
           "{t}怎么改预约",
           "{t}预约要注意什么"
         ],
         "V": [
           "想{v}怎么预约",
-          "{v}要提前约吗",
           "{v}怎么取消"
         ]
       },
@@ -886,11 +815,9 @@
           "how do i book {t}",
           "how do i make a reservation for {t}",
           "how far in advance should i book {t}",
-          "where can i book {t}",
           "can i reserve {t} online",
           "how do i cancel my booking for {t}",
           "can i change my {t} reservation",
-          "do i need a deposit to book {t}",
           "can i book {t} for today",
           "who should i ask to book {t}",
           "how do i amend my booking for {t}",
@@ -946,22 +873,18 @@
     "overview": {
       "zh": {
         "N": [
-          "介绍一下{t}",
           "{t}怎么样",
           "{t}好吗",
           "{t}有什么特别的",
           "{t}有什么亮点",
-          "推荐一下{t}",
           "{t}值得去吗",
           "{t}大概是什么情况",
           "说说{t}的情况",
           "{t}有什么讲究",
           "{t}到底是什么",
-          "{t}能介绍一下吗",
           "给我讲讲{t}",
           "{t}有什么内容",
           "{t}如何",
-          "帮我介绍下{t}",
           "{t}有什么好处"
         ],
         "V": []
@@ -972,10 +895,8 @@
           "what is {t} like",
           "how is {t}",
           "what is special about {t}",
-          "would you recommend {t}",
           "is {t} worth visiting",
           "what does {t} include",
-          "can you introduce {t}",
           "what is {t} exactly",
           "what makes {t} special",
           "is {t} any good",

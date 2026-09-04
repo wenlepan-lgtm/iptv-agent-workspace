@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""JOCTV 问法覆盖语料 (joctv-hotel-utterance-v1) 确定性校验器 (Skill 1.2.0)。
+"""JOCTV 问法覆盖语料 (joctv-hotel-utterance-v1) 确定性校验器 (Skill 1.3.0)。
 
 用法:
     python3 validate_utterance_coverage.py --package <kb.json> --corpus <utterances_v1.json> \
@@ -9,11 +9,15 @@
   结构/枚举/id 唯一; 源包 SHA 绑定; 语言隔离 (zh 含汉字且非英文句子, en 含字母且无汉字);
   归一化全局唯一 (去重); 近似冲突 (同语言编辑距离 ≤1); entry/clarify 绑定可追溯 (text 必含
   本条目信号词 topic/keyword/variant); 串扰 (其他条目信号词未被本条目信号词覆盖即 FAIL);
-  事实感知映射 (binding=entry → intent 对应字段在该 entry+lang 已发布; binding=clarify →
-  对应字段必须未发布, 问法指向"该条目缺该事实"的运行时兜底路径); intent 语义匹配 (text 必须
-  可由所声明 intent 的模板 + 合格称呼 + 前后缀结构性派生); NO_FACT 纯净 (entry_id/category
-  为空, text 不含任何条目信号词子串); 事实边界 (问法不携带 HH:MM/长数字/货币/楼层事实值);
-  variant_terms 元数据独占性复核; 数量门槛。
+  intent 级事实感知映射 (1.3.0, 共享 kb_router_chain.intent_fact_available: entry → intent
+  对应事实已发布 — price 恒缺字段, policy/booking 需 notes 含对应事实标记; clarify →
+  intent 事实未发布); intent 语义匹配 (text 必须可由所声明 intent 的模板 + 合格称呼 +
+  前后缀结构性派生); **最终路由一致性 (1.3.0, E_ROUTE_CONSISTENCY: 每条问法用
+  kb_router_chain.route_single_turn 对增强别名发布态 topics 断言最终 decision + 回答
+  字段与声明一致 — entry 精确独占直答; clarify 声明字段缺失时只允许缺字段话术/有效
+  澄清/安全非独占路径; no_fact 只允许安全兜底)**; NO_FACT 纯净 (entry_id/category
+  为空, text 不含任何条目信号词子串); 事实边界 (问法不携带 HH:MM/长数字/货币/楼层
+  事实值); variant_terms 元数据独占性复核; 数量门槛。
 任何 FAIL 输出退出码 1; 全部通过输出 OK 摘要并退出码 0。
 """
 from __future__ import annotations
@@ -25,6 +29,11 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kb_router_chain import (INTENT_RUNTIME_FIELD, build_topics,  # noqa: E402
+                             intent_fact_available, route_expectation,
+                             route_single_turn, runtime_field_published)
+
 SCHEMA_VERSION = "joctv-hotel-utterance-v1"
 ROOT_KEYS = ["schema_version", "skill_version", "hotel_id", "source_package_name",
              "source_package_sha256", "seed", "variant_terms", "counts", "utterances"]
@@ -33,11 +42,9 @@ UTT_KEYS = ["id", "lang", "text", "binding", "entry_id", "category", "intent",
 COUNT_KEYS = ["total", "zh", "en", "entry_bound", "clarify", "no_fact"]
 DEFAULT_TEMPLATES = Path(__file__).resolve().parent.parent / "templates" \
     / "utterance_intent_templates.json"
-INTENT_FIELD = {
-    "time": "time", "location": "location", "directions": "directions",
-    "phone": "phone", "price": "notes", "policy": "notes", "booking": "notes",
-    "availability": "overview", "overview": "overview",
-}
+INTENT_FIELD = {i: (f or "overview") for i, f in INTENT_RUNTIME_FIELD.items()}
+# intent → 语料 field 元数据 (availability/overview → "overview"; price 独立字段)
+LOCALE = {"zh": "zh-CN", "en": "en-US"}
 CJK_RE = re.compile(r'[一-鿿]')
 EN_WORD_RE = re.compile(r'[A-Za-z]+')
 FACT_PATTERNS = [
@@ -46,32 +53,16 @@ FACT_PATTERNS = [
     (re.compile(r'\d+\s*(元|块|楼|层)'), "数字+单位(价格/楼层)"),
     (re.compile(r'(\$\s*\d+|\d+\s*(yuan|rmb|cny|dollars?))', re.I), "货币值"),
 ]
-# 泛指范围词: 只命名酒店自身/泛位置意图, 不独占指向任何主题 — 串扰检查豁免。
-# 与网关 v3_candidate_backend._KB_GENERIC_SCOPE_ALIASES 对齐, 另补位置类意图泛词
-# ("在哪/位置/地址/怎么去酒店" 是位置意图的自然句式词, 同时也是源包位置条目的
-# 泛指命中词; 它们不构成对位置条目的独占证据)。
-GENERIC_SCOPE = {
-    "zh": {"酒店", "酒店介绍", "酒店概览", "朗廷", "新天地朗廷", "附近玩",
-           "位置", "在哪", "地址", "怎么去酒店"},
-    "en": {"hotel", "overview", "hotel overview", "langham", "the langham",
-           "nearby", "the hotel"},
-}
-
-
-def intent_fact_available(e: dict, lang: str, intent: str) -> bool:
-    """(entry, lang) 是否已发布 intent 对应字段的事实 — 与生成器同口径。"""
-    ctx = e.get("context") or {}
-    if intent in ("time", "location", "directions"):
-        return bool(str((ctx.get(intent) or {}).get(lang) or "").strip())
-    if intent == "phone":
-        return bool(str(ctx.get("phone") or "").strip())
-    if intent in ("price", "policy", "booking"):
-        return bool(str((ctx.get("notes") or {}).get(lang) or "").strip())
-    return bool((e.get("answers") or {}).get(lang))
 
 
 def load_templates(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def generic_scope(tpl: dict) -> dict:
+    """泛指范围词 (串扰检查豁免): 模板资源 generic_scope_aliases, 与网关
+    _KB_GENERIC_SCOPE_ALIASES 对齐 + 位置类意图泛词 — 不构成对任何主题的独占证据。"""
+    return {lang: set(words) for lang, words in tpl["generic_scope_aliases"].items()}
 
 
 def template_shapes(tpl: dict) -> dict:
@@ -189,12 +180,12 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
     tpath = Path(templates_path) if templates_path else DEFAULT_TEMPLATES
     tpl = load_templates(tpath)
     shapes = template_shapes(tpl)
+    gscope = generic_scope(tpl)
 
     def _verb(lang: str, term: str) -> bool:
         if lang == "zh":
             return bool(term) and term[0] in tpl["verb_start_chars_zh"]
-        import re as _re
-        words = _re.findall(r"[a-z']+", term.lower())
+        words = re.findall(r"[a-z']+", term.lower())
         return bool(words) and words[0] in tpl["verb_start_words_en"]
 
     sha = hashlib.sha256(pkg_path.read_bytes()).hexdigest()
@@ -206,6 +197,11 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
     entries = {e["id"]: e for e in pkg["entries"]}
     utts = corpus["utterances"]
     sig = signal_map(pkg, corpus)
+
+    # 最终路由断言用的增强别名发布态 topics (与生成器/评测器同构)
+    enh_topics = build_topics(pkg, corpus, enhanced=True, tpl=tpl)
+    topics_by_locale = {loc: [t for t in enh_topics if t["locale"] == loc]
+                        for loc in ("zh-CN", "en-US")}
 
     # ── variant_terms 元数据独占性复核 (同语言, 泛词豁免, en 小写口径) ──
     seen_variant = {}
@@ -229,7 +225,7 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                     if olang != lang or oid == eid:
                         continue
                     for w in words:
-                        if w in GENERIC_SCOPE[lang]:
+                        if w in gscope[lang]:
                             continue
                         if low(v) == low(w) or low(v) in low(w) or low(w) in low(v):
                             err("E_VARIANT_CONFLICT", f"$.variant_terms.{eid_s}.{lang}",
@@ -300,17 +296,27 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                 f"text 无法由 intent={u['intent']!r} 的模板+称呼+前后缀派生 "
                 f"(intent 与问法语义不符或称呼不在本条目集合)")
 
-        # ── 事实感知映射: entry → 事实必须存在; clarify → 事实必须未发布 ──
+        # ── intent 级事实感知映射: entry → intent 事实必须存在; clarify → 必须未发布 ──
         if ref_ok and u["binding"] == "entry":
             if not intent_fact_available(entries[eid_ref], lang, u["intent"]):
                 err("E_INTENT_FACT", p,
                     f"binding=entry 但条目 {eid_ref} {lang} 未发布 "
-                    f"{u['intent']} 对应字段事实 (应属 clarify/NO_FACT 路径)")
+                    f"{u['intent']} 对应事实 (应属 clarify/NO_FACT 路径)")
         elif ref_ok and u["binding"] == "clarify":
             if intent_fact_available(entries[eid_ref], lang, u["intent"]):
                 err("E_CLARIFY_FACT", p,
                     f"binding=clarify 但条目 {eid_ref} {lang} 已发布 "
-                    f"{u['intent']} 对应字段事实 (clarify 只承载缺事实问法)")
+                    f"{u['intent']} 对应事实 (clarify 只承载缺事实问法)")
+
+        # ── 最终路由一致性 (1.3.0): 网关确定性单轮链下 decision+回答字段与声明一致 ──
+        d = route_single_turn(text, LOCALE[lang], topics_by_locale[LOCALE[lang]])
+        fld_present = (runtime_field_published(entries[eid_ref], lang, u["intent"])
+                       if ref_ok else False)
+        if not route_expectation(u["binding"], u["intent"], eid_ref,
+                                 runtime_field_present=fld_present)(d):
+            err("E_ROUTE_CONSISTENCY", p,
+                f"最终路由与声明不符: binding={u['binding']!r} "
+                f"intent={u['intent']!r} field={u['field']!r} → {d}")
 
         n = norm(lang, text)
         if n in seen_norm:
@@ -344,7 +350,7 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                 if olang != lang or oid == eid:
                     continue
                 for w in words:
-                    if w in GENERIC_SCOPE[lang]:
+                    if w in gscope[lang]:
                         continue  # 泛指词不构成独占证据 (对齐网关口径)
                     hit = w in text or (lang == "en" and w.lower() in text.lower())
                     if not hit:
@@ -364,7 +370,7 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                 if olang != lang:
                     continue
                 for w in words:
-                    if w in GENERIC_SCOPE[lang]:
+                    if w in gscope[lang]:
                         continue  # 泛指词 (在哪/位置/hotel 等) 不算泄漏
                     if w in text or (lang == "en" and w.lower() in text.lower()):
                         err("E_NO_FACT_LEAK", p,
@@ -444,7 +450,7 @@ def main() -> int:
     print(f"OK 唯一问法 {n['total']} (zh={n['zh']} en={n['en']} "
           f"entry_bound={n['entry_bound']} clarify={n['clarify']} "
           f"no_fact={n['no_fact']}), 门槛 {args.min_unique} 达标; "
-          f"去重/近似冲突/串扰/事实边界/事实感知映射/intent语义 全部通过")
+          f"去重/近似冲突/串扰/事实边界/intent级事实映射/intent语义/最终路由一致性 全部通过")
     return 0
 
 

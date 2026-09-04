@@ -5,7 +5,7 @@ description: JOCTV 酒店知识编译 Skill。把酒店提供的 Excel 或 TXT �
 
 # JOCTV Hotel Knowledge Compiler Skill（酒店知识编译 Skill）
 
-当前版本：`1.2.0`（以同目录 `VERSION` 为准）。版本升级必须保留旧 Git tag/commit；如果输出 JSON 发生不兼容变化，必须升级 Schema 主版本，不能只改提示规则后继续冒用旧版本。1.2.0：问法语料绑定升级为事实感知三分类（entry / clarify / no_fact），新增网关最终决策链副本与绝对安全门。
+当前版本：`1.3.0`（以同目录 `VERSION` 为准）。版本升级必须保留旧 Git tag/commit；如果输出 JSON 发生不兼容变化，必须升级 Schema 主版本，不能只改提示规则后继续冒用旧版本。1.2.0：问法语料绑定升级为事实感知三分类（entry / clarify / no_fact），新增网关最终决策链副本与绝对安全门。1.3.0：intent 级事实能力（price 恒缺字段、policy/booking 需 notes 事实标记，notes 非空不再同时授权三种事实）；生成改为**硬断言无过滤**（每条发出问法的最终 decision+回答字段与声明一致，违规即生成失败）；评测新增 entry/no_fact/clarify 三类**完整挑战空间确定性枚举门**（无抽样无删除，被剔除资源全量记录在报告）。
 
 本 Skill 在**公司工作站**的 Codex / OpenCode+DeepSeek / Claude CLI+GLM 中加载使用。
 它把酒店提供的资料一次性编译成字段清楚、双语隔离、可由 JOCTV 后台导入的知识包。
@@ -128,22 +128,22 @@ python3 scripts/validate_knowledge_package.py <package.json>
 - 被剔除的噪声类别（导航/天气/modal/促销/异地）与被省略的来源冲突事实清单；
 - 校验命令与结果。
 
-## 7. 问法覆盖生成（1.1.0 新增；1.2.0 事实感知映射 + 最终决策链预审/绝对安全门）
+## 7. 问法覆盖生成（1.1.0 新增；1.2.0 事实感知三分类；1.3.0 intent 级事实能力 + 硬断言无过滤 + 完整挑战空间枚举）
 
 在已编译知识包之上生成**问法/同义表达覆盖语料**，用于路由离线评测与别名增强。问法是宾客表达，**不是答案**：每条绑定三分类之一，回答仍只来自已发布事实，未知内容运行时安全兜底。
 
-- `binding=entry`：问法指向某条目，且该条目**已发布**此 intent 对应字段的事实（time/location/directions→context 对应语言字段；phone→context.phone；price/policy/booking→context.notes；availability/overview→answers）。运行时预期独占直答。
-- `binding=clarify`：问法点名某条目，但该条目**未发布**此 intent 对应字段的事实（运行时预期 KB_MISSING_FIELD"暂未收录"安全兜底或确定性澄清，**不得**从其他条目借事实）。
-- `binding=no_fact`：知识库外主题问法（运行时预期非知识/低匹配规划器路径 → KB_SAFE 兜底）。
+- `binding=entry`：问法指向某条目，且该条目**已发布此 intent 对应字段的事实**（intent 级判定，共享 `kb_router_chain.intent_fact_available`：time/location/directions→context 对应语言字段；phone→context.phone；**price→恒为缺字段**（kb-v1 无结构化价格字段，价格问法一律 KB_MISSING_FIELD/规划器安全兜底）；**policy/booking→notes 已发布且文本含对应事实标记**（政策/规定/着装/年龄… vs 预约/预订/退订…，notes 非空不再同时授权两类事实）；availability/overview→answers）。运行时预期独占直答且**回答字段与声明 intent 一致**。
+- `binding=clarify`：问法点名某条目，但该条目**未发布此 intent 对应字段的事实**（字段缺，或 policy/booking 的 notes 标记缺）。声明字段缺失时运行时只允许 KB_MISSING_FIELD（字段=声明字段）/有效澄清/安全非独占路径；声明字段已发布但 intent 标记缺时，同条目同声明字段的直答是诚实回答（回答字段与声明一致，不借条目不换字段）。
+- `binding=no_fact`：知识库外主题问法（运行时预期非知识/低匹配规划器/缺字段路径 → KB_SAFE 兜底）。
 
 ### 7.1 输入与产物
 
 输入：一份通过校验的 `joctv-hotel-kb-v1` 知识包 + `templates/utterance_intent_templates.json`（通用酒店意图本体，不含任何酒店事实）。
 
 ```bash
-# 1. 生成 (确定性: 同包同 seed 同字节输出; 含最终决策链预审)
+# 1. 生成 (确定性: 同包同 seed 同字节输出; 每条问法最终路由硬断言, 违规即失败)
 python3 tools/joctv-hotel-kb-skill/scripts/generate_utterance_coverage.py \
-    --package <kb.json> --out <outdir> [--seed 20260904] [--per-cell 32] \
+    --package <kb.json> --out <outdir> [--seed 20260904] [--per-cell 40] \
     [--clarify-per-cell 8]
 
 # 2. 校验 (去重/近似冲突/串扰/事实边界/事实感知映射/intent 语义派生/variant 独占性)
@@ -163,18 +163,19 @@ python3 tools/joctv-hotel-kb-skill/scripts/eval_route_holdout.py \
 | 文件 | 作用 |
 |---|---|
 | `utterances_v1.json` | 问法语料（`joctv-hotel-utterance-v1`）：每条含 lang/text/binding(entry\|clarify\|no_fact)/entry_id/category/intent/field/term_kind(base\|variant)，并带源包 SHA 绑定与 variant_terms 声明 |
-| `generation_report.json` | 生成统计：逐条目 base/variant 数与事实可用/缺失 intent 清单、被拒 variant 及原因、被拒 NO_FACT 主题、去重丢弃数、决策链预审拒绝明细（clarify/no_fact） |
-| `holdout_eval_report.json` | 留出集评测：baseline vs enhanced 命中率、NO_FACT 兜底不回归、歧义探针、gates、findings |
+| `generation_report.json` | 生成统计：逐条目 base/variant 数与 intent 事实可用/字段发布态清单、被拒 variant 及原因、被拒 NO_FACT 主题、去重丢弃数、组合劫持排除明细、最终路由硬断言计数（违规即生成失败） |
+| `holdout_eval_report.json` | 留出集评测：baseline vs enhanced 命中率、NO_FACT 兜底不回归、歧义探针、全部 gates（含三类完整挑战空间枚举）、excluded_resources（被剔除资源/组合全量记录）、findings |
 | `alias_enhanced_package.json` | **后台可直接导入**的增强别名知识包（`joctv-hotel-kb-v1`；answers/context/事实零变化，仅 keywords 追加新称呼，走现有知识导入端点） |
 | `new_aliases.json` | 别名/表达资产清单（每条目每语言新增别名 + 代表问法样例） |
 
 ### 7.2 生成规则
 
-- **意图本体**：9 类通用意图 time/location/directions/phone/price/policy/booking/availability/overview，各自映射到知识字段（`intent_fields`）；句式模板按名词称呼（N）与动宾称呼（V）分槽，礼貌前缀与句式头部重复的组合自动跳过。
-- **事实感知映射（1.2.0）**：只有该 (entry, lang) 已发布对应字段事实的组合才生成 `entry` 问法；问法点名条目但对应字段未发布 → `clarify`（默认每格 8 条，`--clarify-per-cell`）。校验器双向反例强制：entry 绑定事实缺失 = E_INTENT_FACT，clarify 绑定事实已发布 = E_CLARIFY_FACT。
-- **intent 语义派生（1.2.0）**：每条问法 text 必须可由所声明 intent 的模板结构（前缀 + 模板前段 + 称呼 + 模板后段 + 后缀）派生，称呼必须命中该条目对应 (slot, term_kind) 集合；不匹配 = E_INTENT_TEMPLATE。
-- **最终决策链预审（1.2.0）**：clarify / no_fact 候选问法用 `kb_router_chain.final_decision`（网关 `kb_route` 确定性层逐字副本）对增强别名发布态 topics 预审：no_fact 必须落入安全兜底（NOT_KNOWLEDGE / KB_NPU_PLANNER / KB_MISSING_FIELD），clarify 不得被**其他条目**独占直答；不合格候选确定性跳过并计入生成报告（公共简称/模板填充词的 stem 吸收泄漏一并根治）。
-- **称呼来源**：`base` = 源条目信号词（topic/keyword，过滤疑问短语与泛词；**公共简称剔除**：非主题名且是其他条目信号词严格子串的称呼不作 base，此类问法运行时确定性澄清）；`variant` = 同义称呼词典命中且通过**全局独占性**检查（与任何其他条目信号词/已分配 variant 不互为子串、非公共简称、非疑问/泛词）。variant 是增强别名的唯一来源。
+- **意图本体**：9 类通用意图 time/location/directions/phone/price/policy/booking/availability/overview，各自映射到运行时回答字段（`intent_fields`，与 `kb_router_chain.INTENT_RUNTIME_FIELD` 同源：availability/overview → 概述回答变体，语料 field 元数据归一为 `overview`；price 独立字段）；句式模板按名词称呼（N）与动宾称呼（V）分槽，礼貌前缀与句式头部重复的组合自动跳过。
+- **intent 级事实能力（1.3.0）**：只有该 (entry, lang) 已发布**此 intent 对应字段的事实**（含 policy/booking 的 notes 标记判定）的组合才生成 `entry` 问法；intent 事实未发布 → `clarify`（默认每格 8 条，`--clarify-per-cell`）。校验器双向反例强制：entry 绑定 intent 事实缺失 = E_INTENT_FACT（price 一律触发），clarify 绑定 intent 事实已发布 = E_CLARIFY_FACT。
+- **intent 语义派生**：每条问法 text 必须可由所声明 intent 的模板结构（前缀 + 模板前段 + 称呼 + 模板后段 + 后缀）派生，称呼必须命中该条目对应 (slot, term_kind) 集合；不匹配 = E_INTENT_TEMPLATE。
+- **最终路由硬断言（1.3.0，无过滤）**：每条**发出**的问法用 `kb_router_chain.route_single_turn`（网关 `kb_route` 确定性单轮全链逐字副本：范围缺口裁决→实体剥离字段识别→直接最长匹配→短称受控候选→比较级分支→直答/缺字段/规划器/非知识）对增强别名发布态 topics 断言最终 decision + 回答字段与声明一致（entry 精确独占直答；clarify 按声明字段发布态断言；no_fact 只允许安全兜底）。**违规即生成失败（exit 2），不做任何安全过滤/跳过**——语料不存在"先筛后验"的自证循环；完整挑战空间的枚举验证在评测器（见 7.3）。
+- **组合级标签一致性（1.3.0）**：称呼与模板拼接后若包含**其他条目**更长命中词（如「川水疗」+「预约要注意什么」拼出「水疗预约」），该句按构造以其他更具体条目为最 Mentioned 实体，声明绑定本条目属标签错误——组合确定性排除并全量计入生成/评测报告（`combo_hijack_excluded` / `excluded_resources`），与路由实现无关。
+- **称呼来源**：`base` = 源条目信号词（topic/keyword，过滤疑问短语与泛词；**公共简称剔除**：非主题名且是其他条目信号词严格子串的称呼不作 base，此类问法运行时确定性澄清；比较级词称呼剔除）；`variant` = 同义称呼词典命中且通过**全局独占性**检查（与任何其他条目信号词/已分配 variant 不互为子串、非公共简称、非疑问/泛词/比较级词）。variant 是增强别名的唯一来源。
 - **泛指词口径**：`generic_scope_aliases` 与网关 `_KB_GENERIC_SCOPE_ALIASES` 对齐并补充位置类意图泛词（在哪/位置/地址 等）——它们不构成对任何主题的独占证据，冲突检查豁免；增强别名包按确定性规则移除该类源 keyword（只动 alias，不动事实/主题名）。
 - **NO_FACT**：KB 之外的通用酒店主题（电影院/桑拿房/货币兑换 等），用于安全兜底负例；不得包含任何条目信号词子串，且必须通过决策链预审落入安全兜底。
 - **反凑数**：后缀不进组合空间（每组合只抽一个后缀，"呀/啊/呢"互为近似的变体只保留一条）；全局近似去重（编辑距离 ≤1 一律不重复发出）；纯单复数 variant 不收录。
@@ -183,12 +184,14 @@ python3 tools/joctv-hotel-kb-skill/scripts/eval_route_holdout.py \
 
 ### 7.3 评测口径
 
-两层口径，算法副本集中在 `scripts/kb_router_chain.py`（与生成器预审共用同一实现），内置源码快照 SHA 防漂移门（网关算法变化时评测 FAIL，需重对齐副本）；Skill 单独拷贝到工作站时用 `--allow-missing-router` 跳过。
+两层口径，算法副本集中在 `scripts/kb_router_chain.py`（与生成器硬断言/校验器 E_ROUTE_CONSISTENCY 共用同一实现，**不存在第二套未建模的决策副本**），内置源码快照 SHA 防漂移门（网关算法变化时评测 FAIL，需重对齐副本）；Skill 单独拷贝到工作站时用 `--allow-missing-router` 跳过。
 
 - **评分层**（网关 `_kb_topk_scored` 逐字副本）：留出集 entry 绑定问法按 (entry_id, lang) 分层随机留出 12%（固定 seed），对比 baseline（源包 keywords）vs enhanced（+variant −公共简称/泛指词）的 hit@1 / variant 子集 / NO_FACT 兜底率不回归 / 歧义探针不新增独占（baseline 已存在的源包 keyword 公共简称缺陷如实记 findings）。
-- **最终决策层**（网关 `kb_route` 确定性决策链逐字副本，1.2.0）：四个绝对安全门——
-  - `NO_FACT_ABSOLUTE_SAFE`：全部 no_fact 问法落入安全兜底（NOT_KNOWLEDGE / KB_NPU_PLANNER / KB_MISSING_FIELD）；独占直答与错候选澄清都算违规；
-  - `CLARIFY_ABSOLUTE_SAFE`：全部 clarify 问法不被**其他条目**独占直答（绑定条目自身已发布字段的直答是诚实回答）；
+- **最终决策层**（网关 `kb_route` 确定性单轮全链逐字副本 `route_single_turn`，共享 `route_expectation` 断言"最终 decision + 回答字段与声明 intent 一致"）：
+  - `FINAL_ROUTE_FIELD_CORRECT`：全量语料 entry 绑定问法**精确独占直答**（decision+topic_id+field 三者与声明一致，不是只看 topic hit@1）；
+  - `NO_FACT_ABSOLUTE_SAFE` / `CLARIFY_ABSOLUTE_SAFE`：全量语料 no_fact/clarify 绑定按声明断言安全（clarify 声明字段缺失时只允许缺字段话术/有效澄清/安全非独占路径；intent 标记缺但声明字段已发布时允许同条目同字段直答=诚实回答，如实计数）；
+  - `ENTRY_CHALLENGE_FULL` / `NO_FACT_CHALLENGE_FULL` / `CLARIFY_CHALLENGE_FULL`（1.3.0）：**完整挑战空间确定性枚举**（全部事实已发布 entry×intent×模板×合格称呼×前缀 / 全部 NO_FACT 合格主题×模板×前缀 / 全部缺事实 entry×intent×模板×称呼×前缀），逐条断言，**不抽样不删除**——路由失败样本不可能被生成侧筛选掉（生成器硬断言无过滤，本门独立复核）；枚举与生成器合法组合空间同口径（单一资源规则），被剔除资源/组合全量记入报告 `excluded_resources`（剔除只依赖资源文本本身，与路由结果无关）；
+  - `VARIANT_TERMS_REBUILD_MATCH`：语料 variant_terms 与确定性重建逐项一致（防手改语料使挑战空间与导出物脱节）；
   - `AMBIGUITY_ABSOLUTE_NON_EXCLUSIVE`：全部歧义探针进入澄清或非独占路径；
   - `CORRECT_NO_NEW_WRONG_ROUTE`：baseline 正确直答样本在 enhanced 无新增错误条目直答。
 

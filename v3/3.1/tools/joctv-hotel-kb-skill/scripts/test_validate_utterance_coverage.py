@@ -44,7 +44,12 @@ def make_pkg() -> dict:
                     "time": {"zh": "每天 6:00-23:00", "en": "Daily 6:00-23:00"},
                     "location": {"zh": "2楼", "en": "2nd floor"},
                     "directions": {"zh": "", "en": ""},
-                    "phone": "", "notes": {"zh": "", "en": ""},
+                    "phone": "",
+                    # notes 只含 policy 事实标记 (着装/要求), 不含 booking 标记
+                    # (预约/预订/reserv/book…) — 1.3.0 intent 级事实能力测试锚点
+                    "notes": {"zh": "着装要求：请穿运动服装与运动鞋；器械用后请归位。",
+                              "en": "Dress code: sportswear and sports shoes; "
+                                    "please return equipment after use."},
                 },
                 "enabled": True,
             },
@@ -82,7 +87,7 @@ def utt(i, lang, text, binding="entry", entry_id=1, category="玩", intent="time
 def make_corpus(pkg_sha: str) -> dict:
     return {
         "schema_version": "joctv-hotel-utterance-v1",
-        "skill_version": "1.2.0",
+        "skill_version": "1.3.0",
         "hotel_id": "t1",
         "source_package_name": pkg_name(),
         "source_package_sha256": pkg_sha,
@@ -98,7 +103,7 @@ def make_corpus(pkg_sha: str) -> dict:
                 intent="directions", field="directions"),
             utt(3, "en", "what time does fitness center open", category="玩"),
             utt(4, "zh", "电影院怎么收费", binding="no_fact", entry_id=None,
-                category=None, intent="price", field="notes"),
+                category=None, intent="price", field="price"),
             utt(5, "en", "how do i get to workout room", binding="clarify",
                 term_kind="variant", intent="directions", field="directions"),
         ],
@@ -290,7 +295,8 @@ class IdTests(unittest.TestCase):
 
 
 class FactMappingTests(unittest.TestCase):
-    """事实感知映射 (1.2.0): entry 绑定要求事实已发布, clarify 绑定要求事实未发布。"""
+    """事实感知映射 (1.3.0): entry 绑定要求 intent 级事实已发布, clarify 绑定要求
+    intent 级事实未发布 — notes 非空不再同时授权 price/policy/booking。"""
 
     def test_entry_binding_without_published_fact(self):
         # 早餐条目 (id=2) 无 directions 事实, 却以 entry 绑定问"怎么走" → FAIL
@@ -316,6 +322,80 @@ class FactMappingTests(unittest.TestCase):
         c = make_corpus("x")
         c["utterances"][1]["entry_id"] = 9
         self.assertIn("E_ENTRY_REF", codes(run_validate(self, c)))
+
+    def test_price_never_entry_boundable(self):
+        # kb-v1 无结构化价格字段: 即使 notes 已发布, price 也不得 entry 绑定
+        c = make_corpus("x")
+        c["utterances"][0]["text"] = "健身房怎么收费"
+        c["utterances"][0]["intent"] = "price"
+        c["utterances"][0]["field"] = "price"
+        self.assertIn("E_INTENT_FACT", codes(run_validate(self, c)))
+
+    def test_policy_marker_enables_entry_binding(self):
+        # 健身房 notes 含 policy 标记 (着装/要求) → policy intent 可 entry 绑定
+        c = make_corpus("x")
+        c["utterances"][0]["text"] = "健身房有什么规定"
+        c["utterances"][0]["intent"] = "policy"
+        c["utterances"][0]["field"] = "notes"
+        self.assertNotIn("E_INTENT_FACT", codes(run_validate(self, c)))
+
+    def test_booking_notes_without_marker_not_entry_fact(self):
+        # notes 已发布但**不含 booking 标记** (无 预约/预订/reserv/book…) →
+        # booking intent 不得 entry 绑定 (1.3.0: notes 非空不再授权 booking)
+        c = make_corpus("x")
+        c["utterances"][0]["text"] = "健身房怎么预约"
+        c["utterances"][0]["intent"] = "booking"
+        c["utterances"][0]["field"] = "notes"
+        self.assertIn("E_INTENT_FACT", codes(run_validate(self, c)))
+
+    def test_booking_clarify_legal_when_marker_missing(self):
+        # 同一问法挂 clarify 合法: intent 级 booking 事实未发布 (标记缺),
+        # 声明字段 notes 已发布 → 允许同条目同字段诚实直答 (不冒充其他字段)
+        c = make_corpus("x")
+        c["utterances"][0]["text"] = "健身房怎么预约"
+        c["utterances"][0]["binding"] = "clarify"
+        c["utterances"][0]["intent"] = "booking"
+        c["utterances"][0]["field"] = "notes"
+        c["counts"]["entry_bound"] = 1
+        c["counts"]["clarify"] = 3
+        got = codes(run_validate(self, c))
+        self.assertNotIn("E_INTENT_FACT", got)
+        self.assertNotIn("E_CLARIFY_FACT", got)
+        self.assertNotIn("E_ROUTE_CONSISTENCY", got)
+
+
+class RouteConsistencyTests(unittest.TestCase):
+    """最终路由一致性 (1.3.0, E_ROUTE_CONSISTENCY): 声明 intent/字段与
+    route_single_turn 最终 decision 不符必须 FAIL (不是只看 topic 命中)。"""
+
+    def test_entry_declared_field_mismatch(self):
+        # 时间问法声明为 location: topic 命中但最终回答字段是 time → FAIL
+        c = make_corpus("x")
+        c["utterances"][0]["intent"] = "location"
+        c["utterances"][0]["field"] = "location"
+        self.assertIn("E_ROUTE_CONSISTENCY", codes(run_validate(self, c)))
+
+    def test_clarify_declared_missing_field_must_not_direct_answer(self):
+        # clarify (声明字段缺失) 的问法若被独占概述直答 → FAIL; 用已发布 time 事实
+        # 的概述问法伪装 clarify: text="健身房怎么样" (overview 形状) 声明 directions
+        c = make_corpus("x")
+        c["utterances"][1]["text"] = "健身房怎么样"
+        c["utterances"][1]["term_kind"] = "base"
+        c["utterances"][1]["intent"] = "directions"
+        c["utterances"][1]["field"] = "directions"
+        got = codes(run_validate(self, c))
+        self.assertIn("E_ROUTE_CONSISTENCY", got)
+
+    def test_no_fact_routed_to_direct_answer(self):
+        # no_fact 问法含条目信号词且该字段已发布 → 被独占直答, 非安全兜底 →
+        # E_ROUTE_CONSISTENCY + E_NO_FACT_LEAK
+        c = make_corpus("x")
+        c["utterances"][3]["text"] = "健身房几点开门"
+        c["utterances"][3]["intent"] = "time"
+        c["utterances"][3]["field"] = "time"
+        got = codes(run_validate(self, c))
+        self.assertIn("E_NO_FACT_LEAK", got)
+        self.assertIn("E_ROUTE_CONSISTENCY", got)
 
 
 class IntentSemanticTests(unittest.TestCase):
@@ -367,6 +447,13 @@ class SchemaContractTests(unittest.TestCase):
         item = self.schema["properties"]["utterances"]["items"]
         self.assertEqual(set(item["properties"]["intent"]["enum"]),
                          set(v.INTENT_FIELD.keys()))
+
+    def test_field_enum_matches_validator_field_values(self):
+        # 1.3.0: field 枚举 = intent→field 映射的值域 (availability/overview 归一为
+        # "overview"; price 独立字段) — schema 与校验器不得漂移
+        item = self.schema["properties"]["utterances"]["items"]
+        self.assertEqual(set(item["properties"]["field"]["enum"]),
+                         set(v.INTENT_FIELD.values()))
 
 
 if __name__ == "__main__":
