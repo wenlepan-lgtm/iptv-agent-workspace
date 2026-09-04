@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""JOCTV 问法覆盖留出集路由评测器 (Skill 1.3.0)。
+"""JOCTV 问法覆盖留出集路由评测器 (Skill 1.4.0)。
 
 只读离线评测, 两层口径 (决策链/评分副本均来自 scripts/kb_router_chain, 与生成器
 硬断言/校验器 E_ROUTE_CONSISTENCY 共用同一实现 — 不存在第二套未建模的决策副本):
@@ -7,19 +7,22 @@
      baseline (源包 keywords) vs enhanced (keywords + variant 称呼 − 公共简称/泛指词)
      的 hit@1 / variant 子集 / NO_FACT 不回归 / 歧义探针不新增独占;
   2) 最终决策层 (1.3.0, 网关 kb_route 确定性**单轮全链**副本 route_single_turn:
-     范围缺口裁决 → 字段识别 → 直接匹配 → 短称候选 → 比较级分支 → 直答/缺字段/
-     规划器/非知识), 共享 route_expectation 断言"最终 decision + 回答字段与声明
-     intent 一致":
+     范围缺口裁决 → 字段识别 → 直接匹配 → 短称候选 → 比较级分支 → intent 级事实门
+     → 直答/缺字段/规划器/非知识), 共享 route_expectation 断言"最终 decision + 回答
+     字段与声明 intent 一致":
        - FINAL_ROUTE_FIELD_CORRECT: 全量语料 entry 绑定问法精确独占直答
          (decision+topic+field 三者与声明一致 — 不是只看 topic hit@1);
-       - NO_FACT_ABSOLUTE_SAFE / CLARIFY_ABSOLUTE_SAFE: 全量语料 no_fact/clarify
-         绑定按声明断言安全 (clarify 声明字段缺失时只允许缺字段话术/有效澄清/
-         安全非独占路径; intent 标记缺但声明字段已发布时允许同条目同字段直答);
-       - NO_FACT_CHALLENGE_FULL / CLARIFY_CHALLENGE_FULL (1.3.0): **完整挑战空间
-         确定性枚举** (全部 NO_FACT 主题 × 全部 no_fact intent 模板 × 前缀; 全部
-         (entry, lang, intent) 缺事实组合 × 全部模板 × 称呼 × 前缀), 逐条断言,
-         不抽样不删除 — 路由失败样本不可能被生成侧筛选掉 (生成器已改为硬断言
-         无过滤, 本门独立复核);
+       - NO_FACT_ABSOLUTE_SAFE / CLARIFY_ABSOLUTE_SAFE / MISSING_SUBFACT_ABSOLUTE_SAFE:
+         全量语料 no_fact/clarify/missing_subfact 绑定按声明断言安全 (clarify 声明
+         字段缺失时只允许缺字段话术/有效澄清/安全非独占路径 — **任何独占直答都是
+         冒充回答**; missing_subfact 只允许缺字段话术 (字段=声明字段, 主题=碰撞条目)
+         或安全非独占路径, 零独占直答);
+       - NO_FACT_CHALLENGE_FULL / CLARIFY_CHALLENGE_FULL / MISSING_SUBFACT_CHALLENGE_FULL
+         (1.3.0/1.4.0): **完整挑战空间确定性枚举** (全部合格 NO_FACT 主题 × 全部
+         no_fact intent 模板 × 前缀; 全部 (entry, lang, intent) 缺事实组合 × 全部
+         模板 × 称呼 × 前缀; 全部关键词碰撞主题 (1.4.0 不再删除, 如 宠物寄养/pet
+         daycare 命中 Pet Friendly) × 全部模板 × 前缀), 逐条断言, 不抽样不删除 —
+         路由失败样本不可能被生成侧筛选掉 (生成器已改为硬断言无过滤, 本门独立复核);
        - AMBIGUITY_ABSOLUTE_NON_EXCLUSIVE: 全部歧义探针进入澄清或非独占路径;
        - CORRECT_NO_NEW_WRONG_ROUTE: baseline 正确直答样本在 enhanced 无新增
          错误条目直答。
@@ -49,10 +52,9 @@ from generate_utterance_coverage import (_prefix_head_clash, build_raw_terms,  #
                                          filter_no_fact_topics, term_verb)
 from kb_router_chain import (FACT_LEAK_DECISIONS, SAFE_FALLBACK_DECISIONS,  # noqa: E402
                              _kb_topk_scored, build_topics, intent_fact_available,
-                             removed_keywords, route_expectation, route_single_turn,
-                             runtime_field_published)
+                             removed_keywords, route_expectation, route_single_turn)
 
-ROUTER_SNAPSHOT_SHA256 = "06ae623517af9185283211073999dd841c6646e981c58906e642e5bef94150a0"
+ROUTER_SNAPSHOT_SHA256 = "fb4db172875ee840479d829933a2710060773073025b3ee08a244b5dec4673be"
 ROUTER_WANT = {
     # 评分层
     "_kb_cjk_bigrams", "_kb_topic_text", "_kb_topk_scored", "_KB_QUERY_SYNONYMS_ZH",
@@ -62,6 +64,9 @@ ROUTER_WANT = {
     "_kb_stem_candidates", "_kb_direct_answer", "_KB_FIELD_ZH",
     "_kb_strip_entity",
     "_KB_COMPARISON_RE", "_KB_COMPARISON_TOPICLESS_RE",
+    # intent 级事实门 + 子事实覆盖检查 (V30-04 R2, KB30-04-01/02)
+    "_KB_NOTES_INTENT_FACT", "_KB_NOTES_ASK", "_kb_notes_intent_gap",
+    "_KB_ZH_SCAFFOLD", "_KB_EN_SCAFFOLD", "_kb_subfact_uncovered",
     # 范围缺口裁决 (V25-08R2)
     "_KB_GENERIC_SCOPE_ALIASES", "_KB_OUTSIDE_MARKERS", "_KB_OUTSIDE_RESOURCES",
     "_kb_outside_scope", "_kb_names_blob", "_kb_outside_covered",
@@ -270,51 +275,52 @@ def main() -> int:
 
     # ── 最终决策层 (1.3.0, route_single_turn 单轮全链): 共享 route_expectation 断言 ──
     def chain_check(pred, topics):
-        """按绑定断言语料问法的最终 decision+回答字段; 返回 (dist, violations,
-        bound_field_direct)。bound_field_direct = clarify 声明字段已发布时的同条目
-        同字段直答 (诚实回答, 不算泄漏)。"""
-        dist, violations, bound_field_direct = {}, [], 0
+        """按绑定断言语料问法的最终 decision+回答字段; 返回 (dist, violations)。
+        V30-04 R2: clarify 废除"声明字段已发布允许直答"例外 — 任何独占直答都是违规。"""
+        dist, violations = {}, []
         for u in corpus["utterances"]:
             if not pred(u):
                 continue
             loc = locale_of[u["lang"]]
             d = route_single_turn(u["text"], loc, topics_loc(topics, loc))
             dist[d["decision"]] = dist.get(d["decision"], 0) + 1
-            fld_present = (runtime_field_published(entries[u["entry_id"]], u["lang"],
-                                                   u["intent"])
-                           if u["entry_id"] in entries else False)
-            if not route_expectation(u["binding"], u["intent"], u["entry_id"],
-                                     runtime_field_present=fld_present)(d):
+            if not route_expectation(u["binding"], u["intent"], u["entry_id"])(d):
                 violations.append({"id": u["id"], "text": u["text"],
                                    "binding": u["binding"], "intent": u["intent"],
                                    "field": u["field"], "decision": d})
-            elif (u["binding"] == "clarify" and d["decision"] == "KB_DIRECT_FACT"):
-                bound_field_direct += 1
-        return dist, violations, bound_field_direct
+        return dist, violations
 
     # entry 绑定: 最终 decision+topic+字段 三者精确一致 (KB30-04-01 核心)
-    _, enh_entry_bad, _ = chain_check(lambda u: u["binding"] == "entry", enhanced)
+    _, enh_entry_bad = chain_check(lambda u: u["binding"] == "entry", enhanced)
     gate("FINAL_ROUTE_FIELD_CORRECT", not enh_entry_bad,
          f"全量 entry 绑定 n={sum(1 for u in corpus['utterances'] if u['binding'] == 'entry')} "
          f"最终路由字段/主题不一致 {len(enh_entry_bad)} 例 (decision+topic_id+field 与声明精确一致)")
 
-    base_nf_dist, base_nf_bad, _ = chain_check(
+    base_nf_dist, base_nf_bad = chain_check(
         lambda u: u["binding"] == "no_fact", baseline)
-    enh_nf_dist, enh_nf_bad, _ = chain_check(
+    enh_nf_dist, enh_nf_bad = chain_check(
         lambda u: u["binding"] == "no_fact", enhanced)
     gate("NO_FACT_ABSOLUTE_SAFE", not enh_nf_bad,
          f"决策层 n={sum(enh_nf_dist.values())} 非安全兜底 {len(enh_nf_bad)} 例 "
          f"(baseline {len(base_nf_bad)} 例); 分布 {enh_nf_dist}")
 
-    base_cl_dist, base_cl_bad, _ = chain_check(
+    base_cl_dist, base_cl_bad = chain_check(
         lambda u: u["binding"] == "clarify", baseline)
-    enh_cl_dist, enh_cl_bad, cl_bound_direct = chain_check(
+    enh_cl_dist, enh_cl_bad = chain_check(
         lambda u: u["binding"] == "clarify", enhanced)
     gate("CLARIFY_ABSOLUTE_SAFE", not enh_cl_bad,
          f"决策层 n={sum(enh_cl_dist.values())} 声明不符 {len(enh_cl_bad)} 例 "
-         f"(声明字段缺失问法被独占直答/错字段缺字段话术; baseline {len(base_cl_bad)} 例; "
-         f"声明字段已发布的同条目同字段直答 {cl_bound_direct} 例=诚实回答); "
+         f"(缺 intent 事实问法被独占直答/错字段缺字段话术; baseline {len(base_cl_bad)} 例; "
+         f"任何独占直答均为冒充回答); "
          f"分布 {enh_cl_dist}")
+
+    # missing_subfact 绑定 (1.4.0, KB30-04-02): 全量语料断言 — 零独占直答
+    enh_ms_dist, enh_ms_bad = chain_check(
+        lambda u: u["binding"] == "missing_subfact", enhanced)
+    gate("MISSING_SUBFACT_ABSOLUTE_SAFE", not enh_ms_bad,
+         f"决策层 n={sum(enh_ms_dist.values())} 非安全结局 {len(enh_ms_bad)} 例 "
+         f"(只允许缺字段话术(字段=声明字段,主题=碰撞条目)/有效澄清/安全非独占路径); "
+         f"分布 {enh_ms_dist}")
 
     # ── 完整挑战空间枚举 (1.3.0): 不抽样、不删除, 独立于生成器的全量复核 ──
     # 枚举空间与生成器**合法组合空间**同口径 (单一资源规则): NO_FACT 主题先过
@@ -369,6 +375,36 @@ def main() -> int:
          f"(合格主题×全部模板×前缀, 无抽样); 非安全兜底 {len(nf_challenge['bad'])} 例; "
          f"分布 {nf_challenge['dist']}; 资源剔除 no_fact 主题 {len(nf_rejected_res)} 项"
          f"/信号词 {len(dropped_signals)} 项 (见 excluded_resources)")
+
+    # missing_subfact 挑战集 (1.4.0, KB30-04-02): 关键词碰撞 NO_FACT 主题**不删除** —
+    # 完整枚举 (全部碰撞主题 × 全部 no_fact intent N 模板 × 前缀), 断言 KB_MISSING_FIELD
+    # (字段=声明字段, 主题=碰撞条目) 或安全非独占路径, 零独占直答
+    ms_challenge = {"n": 0, "bad": [], "dist": {}}
+    for r in nf_rejected_res:
+        lang = r["lang"]
+        term = r["topic"].lower() if lang == "en" else r["topic"]
+        topics_loc_list = topics_loc(enhanced, locale_of[lang])
+        for intent in tpl["no_fact_intents"]:
+            for tpl_text in tpl["intents"][intent][lang].get("N", []):
+                if "{v}" in tpl_text:
+                    continue
+                for prefix in tpl["prefixes"][lang]:
+                    text = _render(lang, prefix, tpl_text, term)
+                    d = route_single_turn(text, locale_of[lang], topics_loc_list)
+                    ms_challenge["n"] += 1
+                    ms_challenge["dist"][d["decision"]] = \
+                        ms_challenge["dist"].get(d["decision"], 0) + 1
+                    if not route_expectation("missing_subfact", intent,
+                                             r["entry_id"])(d):
+                        if len(ms_challenge["bad"]) < 20:
+                            ms_challenge["bad"].append(
+                                {"text": text, "intent": intent,
+                                 "entry_id": r["entry_id"], "decision": d})
+    gate("MISSING_SUBFACT_CHALLENGE_FULL", not ms_challenge["bad"],
+         f"完整 missing_subfact 挑战空间枚举 n={ms_challenge['n']} "
+         f"(全部关键词碰撞主题×全部模板×前缀, 无抽样, 不删除); 独占直答 "
+         f"{len(ms_challenge['bad'])} 例; 分布 {ms_challenge['dist']}; "
+         f"碰撞主题 {[(r['topic'], r['entry_id']) for r in nf_rejected_res]}")
 
     # entry 挑战集 (1.3.0): 全部 (entry, lang, intent) **事实已发布**组合 × 模板(N/V)
     # × 合格称呼 × 前缀 — 最终 decision+topic+field 必须与声明精确一致 (KB30-04-01
@@ -441,7 +477,6 @@ def main() -> int:
             v_terms += [v for v in var_list if term_verb(lang, v, tpl)]
             if not n_terms and not v_terms:
                 continue
-            fld_pub = {i: runtime_field_published(e, lang, i) for i in tpl["intents"]}
             for intent, spec in tpl["intents"].items():
                 if intent_fact_available(e, lang, intent):
                     continue  # 只枚举缺事实 (clarify) 空间
@@ -466,16 +501,16 @@ def main() -> int:
                                 cl_challenge["n"] += 1
                                 cl_challenge["dist"][d["decision"]] = \
                                     cl_challenge["dist"].get(d["decision"], 0) + 1
-                                if not route_expectation("clarify", intent, e["id"],
-                                                         runtime_field_present=fld_pub[intent])(d):
+                                if not route_expectation("clarify", intent, e["id"])(d):
                                     if len(cl_challenge["bad"]) < 20:
                                         cl_challenge["bad"].append(
                                             {"text": text, "intent": intent,
                                              "entry_id": e["id"], "decision": d})
     gate("CLARIFY_CHALLENGE_FULL", not cl_challenge["bad"],
-         f"完整缺字段挑战空间枚举 n={cl_challenge['n']} "
+         f"完整缺事实挑战空间枚举 n={cl_challenge['n']} "
          f"(全部缺事实 entry×intent×模板×合格称呼×前缀, 无抽样); 声明不符 "
-         f"{len(cl_challenge['bad'])} 例; 分布 {cl_challenge['dist']}; "
+         f"{len(cl_challenge['bad'])} 例 (任何独占直答均为冒充回答); "
+         f"分布 {cl_challenge['dist']}; "
          f"组合劫持排除 {len(cl_hijack_excluded)} 项 (见 excluded_resources)")
 
     # ── 最终决策层: 歧义探针全部进入澄清或非独占路径 (不得独占直答) ──
@@ -594,14 +629,16 @@ def main() -> int:
                     "enhanced_safe_rate": round(enh_safe, 4)},
         "decision_chain": {
             "modeled": "范围缺口裁决→字段识别→直接最长匹配→短称受控候选(0/1/≥2)"
-                       "→比较级分支→直答/缺字段/规划器/非知识 (kb_router_chain."
-                       "route_single_turn, 网关 kb_route 单轮全链副本)",
+                       "→比较级分支→intent级事实门→直答/缺字段/规划器/非知识 "
+                       "(kb_router_chain.route_single_turn, 网关 kb_route 单轮全链副本)",
             "not_modeled": "会话澄清待决态/上下文主题补全/NPU规划器执行"
                            "(规划器非独占多卡路径, supported=false→KB_SAFE, "
                            "自带 grounding 防火墙)",
             "expectation": "共享 route_expectation: entry=decision+topic+field 精确"
-                           "一致; clarify 声明字段缺失=只允许缺字段话术/有效澄清/"
-                           "安全非独占路径 (声明字段已发布时允许同条目同字段直答); "
+                           "一致; clarify=只允许缺字段话术(字段=声明字段,主题=声明"
+                           "条目)/有效澄清/安全非独占路径, 任何独占直答均为冒充回答"
+                           "(V30-04 R2 废除声明字段已发布例外); missing_subfact="
+                           "缺字段话术(主题=碰撞条目)或安全非独占路径; "
                            "no_fact=只允许安全兜底",
             "entry_enhanced_violations": enh_entry_bad[:10],
             "no_fact_baseline": base_nf_dist,
@@ -609,19 +646,24 @@ def main() -> int:
             "no_fact_baseline_violations": base_nf_bad[:10],
             "clarify_baseline": base_cl_dist,
             "clarify_enhanced": enh_cl_dist,
-            "clarify_enhanced_bound_field_direct": cl_bound_direct,
             "clarify_enhanced_violations": enh_cl_bad[:10],
+            "missing_subfact_enhanced": enh_ms_dist,
+            "missing_subfact_enhanced_violations": enh_ms_bad[:10],
             "no_fact_challenge_full": nf_challenge,
             "entry_challenge_full": en_challenge,
             "clarify_challenge_full": cl_challenge,
+            "missing_subfact_challenge_full": ms_challenge,
             "ambiguity_probes": probe_chain,
             "baseline_correct_new_wrong": new_wrong[:10],
         },
         "ambiguity_probes": probe_rows,
         "excluded_resources": {
             "note": "挑战枚举与生成器合法组合空间同口径 (单一资源规则); 以下资源/组合被"
-                    "确定性规则剔除, 全量记录在报告里, 不静默删除 — 剔除只依赖资源"
-                    "文本本身 (子串/泛词/比较级/组合拼出他条目更长别名), 与路由结果无关",
+                    "确定性规则处理, 全量记录在报告里, 不静默删除 — 剔除只依赖资源"
+                    "文本本身 (子串/泛词/比较级/组合拼出他条目更长别名), 与路由结果无关。"
+                    "V30-04 R2: 含条目信号词的 NO_FACT 主题 (no_fact_topics_rejected) "
+                    "不再排除出挑战空间, 而是建模为 missing_subfact 绑定并进入 "
+                    "MISSING_SUBFACT_CHALLENGE_FULL 完整枚举",
             "no_fact_topics_rejected": nf_rejected_res,
             "signal_terms_dropped": dropped_signals,
             "variant_terms_rejected": var_rejected_res,
@@ -647,8 +689,9 @@ def main() -> int:
           f"{enh_stat['hit1_variant_rate']};  评分层 NO_FACT 兜底 "
           f"{base_safe:.4f} → {enh_safe:.4f}")
     print(f"决策层: NO_FACT 分布 {enh_nf_dist}; clarify 分布 {enh_cl_dist}; "
+          f"missing_subfact 分布 {enh_ms_dist}; "
           f"完整挑战空间 entry={en_challenge['n']} / no_fact={nf_challenge['n']} "
-          f"/ clarify={cl_challenge['n']}")
+          f"/ clarify={cl_challenge['n']} / missing_subfact={ms_challenge['n']}")
     print(f"报告: {rep_out}")
     return 0 if all_ok else 1
 

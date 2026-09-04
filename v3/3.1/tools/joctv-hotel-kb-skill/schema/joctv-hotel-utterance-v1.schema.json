@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "joctv-hotel-utterance-v1.schema.json",
   "title": "JOCTV Hotel Utterance Coverage Corpus V1",
-  "description": "酒店知识问法覆盖语料契约 (Skill 1.3.0)。问法(utterance)是宾客表达, 不是答案: 绑定三分类 — entry=条目已发布该 intent 对应字段事实(intent 级判定: price 恒缺字段, policy/booking 需 notes 含对应事实标记); clarify=问法点名条目但该 intent 事实未发布(声明字段缺失时运行时走缺字段安全兜底/确定性澄清, 不得从其他条目借事实、不得以同条目概述/其他字段冒充); no_fact=知识库外主题(未知安全兜底)。语言隔离; 禁止携带事实值(时间/电话/价格数字)。生成、校验、评测三段全部确定性可复跑且共享同一最终路由断言 (kb_router_chain.route_single_turn/route_expectation)。",
+  "description": "酒店知识问法覆盖语料契约 (Skill 1.4.0)。问法(utterance)是宾客表达, 不是答案: 绑定四分类 — entry=条目已发布该 intent 对应字段事实(intent 级判定: price 恒缺字段, policy/booking 需 notes 含对应事实标记); clarify=问法点名条目但该 intent 事实未发布(运行时走缺字段安全兜底/确定性澄清, 不得从其他条目借事实、不得以同条目概述/其他字段/通用 notes 冒充); missing_subfact=关键词碰撞主题(如 宠物寄养/pet daycare 命中 Pet Friendly 信号词)建模为已知条目下的缺失子事实挑战(不删除; 运行时必须返回缺字段话术或安全非独占路径, 零独占直答); no_fact=知识库外主题(未知安全兜底)。语言隔离; 禁止携带事实值(时间/电话/价格数字)。生成、校验、评测三段全部确定性可复跑且共享同一最终路由断言 (kb_router_chain.route_single_turn/route_expectation)。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "skill_version", "hotel_id", "source_package_name", "source_package_sha256", "seed", "variant_terms", "counts", "utterances"],
@@ -32,13 +32,14 @@
     "counts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["total", "zh", "en", "entry_bound", "clarify", "no_fact"],
+      "required": ["total", "zh", "en", "entry_bound", "clarify", "missing_subfact", "no_fact"],
       "properties": {
         "total": {"type": "integer", "minimum": 1},
         "zh": {"type": "integer", "minimum": 0},
         "en": {"type": "integer", "minimum": 0},
         "entry_bound": {"type": "integer", "minimum": 0},
         "clarify": {"type": "integer", "minimum": 0},
+        "missing_subfact": {"type": "integer", "minimum": 0},
         "no_fact": {"type": "integer", "minimum": 0}
       }
     },
@@ -52,14 +53,14 @@
           "id": {"type": "integer", "minimum": 1},
           "lang": {"enum": ["zh", "en"]},
           "text": {"type": "string", "minLength": 3, "maxLength": 96},
-          "binding": {"enum": ["entry", "clarify", "no_fact"]},
+          "binding": {"enum": ["entry", "clarify", "missing_subfact", "no_fact"]},
           "entry_id": {
             "type": ["integer", "null"],
-            "description": "binding=entry/clarify 时为源知识包条目 id; no_fact 时必须为 null。"
+            "description": "binding=entry/clarify 时为源知识包条目 id; binding=missing_subfact 时为关键词碰撞条目 id; no_fact 时必须为 null。"
           },
           "category": {
             "type": ["string", "null"], "maxLength": 16,
-            "description": "binding=entry/clarify 时与源条目 category 一致; no_fact 时为 null。"
+            "description": "binding=entry/clarify 时与源条目 category 一致; binding=missing_subfact/no_fact 时为 null。"
           },
           "intent": {"enum": ["time", "location", "directions", "phone", "price", "policy", "booking", "availability", "overview"]},
           "field": {"enum": ["time", "location", "directions", "phone", "price", "notes", "overview"], "description": "intent 的运行时回答字段: price 为独立可问字段(kb-v1 无结构化价格字段, 价格问法一律缺字段安全兜底); policy/booking → notes; availability/overview → overview(概述回答变体)。"},

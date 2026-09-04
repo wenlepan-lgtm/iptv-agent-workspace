@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""JOCTV 网关 KB 路由链共享副本 (Skill 1.3.0)。
+"""JOCTV 网关 KB 路由链共享副本 (Skill 1.4.0)。
 
 网关 p4_admin/v3_candidate_backend.py 确定性路由层的逐字副本 + Skill 侧共享 helper
 (增强别名包 keyword 移除规则 / 发布物化 topics 构建 / 最终决策模型 / intent 级事实
 能力)。生成器 (generate_utterance_coverage)、校验器 (validate_utterance_coverage)
 与评测器 (eval_route_holdout) 共用本模块, 保证"生成断言""语料校验""留出评测"消费
 同一决策口径 — 不存在第二套未建模的 final_decision 副本。
+
+V30-04 R2 (KB30-04-01/02): intent 级事实门 (_kb_notes_intent_gap — notes 问法
+声明的 booking/policy 意图缺事实标记时不得直答) 与子事实覆盖检查
+(_kb_subfact_uncovered — 概述/可用性问法点名未发布子服务时不得概述直答) 进入
+网关逐字副本区; runtime_field_published 与 intent_fact_available 统一,
+route_expectation 废除 clarify 直答例外并新增 missing_subfact 绑定。
 
 防漂移: eval_route_holdout.check_router_snapshot 用 ROUTER_WANT 从网关源码提取
 同名函数/常量段计算 SHA, 与 ROUTER_SNAPSHOT_SHA256 比对; 网关变化时评测 FAIL,
@@ -25,6 +31,9 @@ _KB_QUERY_SYNONYMS_ZH = (
 )
 
 def _kb_cjk_bigrams(text):
+    """CJK bigram 集合: 整串包含匹配对长问句永远失败 ("安排求婚有什么推荐" 是一个
+    整 run, 永远不会作为子串出现在词条里) — bigram 粒度恢复 notes/回答变体里的
+    相关词命中 (如「求婚」→「新」吧 notes)。"""
     grams = set()
     t = text or ""
     for a, b in _KB_QUERY_SYNONYMS_ZH:
@@ -37,10 +46,13 @@ def _kb_cjk_bigrams(text):
     return grams
 
 def _kb_topic_text(t):
+    """词条全文本 (评分用): 名称+别名+全部字段值+全部回答变体。"""
     return " ".join([t["name"]] + list(t["keywords"])
                     + [str(v) for v in t["fields"].values()] + list(t["answers"]))
 
 def _kb_topk_scored(text, topics, active_topic_id=None):
+    """全索引确定性打分排序: 命中词/主题名包含 (长词高权重) + 当前主题优先 +
+    CJK bigram 文本相关信号; 同分按索引顺序。返回 [(score, i, topic)] 降序。"""
     lower = text.lower()
     qgrams = _kb_cjk_bigrams(text)
     scored = []
@@ -51,6 +63,8 @@ def _kb_topk_scored(text, topics, active_topic_id=None):
             if n in text or n.lower() in lower:
                 score += 1.0 + len(n) / 10.0
         if active_topic_id and t["id"] == active_topic_id: score += 2.0
+        # 文本相关信号 (V25-08R1): 问题 bigram 命中词条文本, 每个 +0.12 — 无别名
+        # 命中的开放问句靠它把真正相关主题排进候选 (英文按整词重叠计)
         if qgrams:
             score += 0.12 * len(qgrams & _kb_cjk_bigrams(_kb_topic_text(t)))
         else:
@@ -58,7 +72,7 @@ def _kb_topk_scored(text, topics, active_topic_id=None):
                 wl = w.lower()
                 if wl in _kb_topic_text(t).lower(): score += 0.12
                 elif wl in ("kids", "kid") and "children" in _kb_topic_text(t).lower():
-                    score += 0.12
+                    score += 0.12   # 口语→词条用语 (与 zh 同义归一同理)
         scored.append((score, i, t))
     scored.sort(key=lambda x: (-x[0], x[1]))
     return scored
@@ -73,6 +87,41 @@ def _kb_is_zh(s):
 # 命中主题后走 KB_MISSING_FIELD 诚实话术, 不再用概述/notes 冒充价格回答;
 # 补齐 booking/policy (预订/规定/book/reserve…)、时间 (什么时候/when is…) 与
 # 英文楼层 (floor) 问法词, 使所问字段在确定性层可识别 (字段级路由正确性)。
+# V30-04 R2 (KB30-04-01): notes 承载 policy/booking 两族 intent 的事实标记 —
+# notes 已发布文本必须真正含对应族标记, 该族 intent 的事实才算存在 (Skill
+# kb_router_chain.intent_fact_available 同一正则); 问句侧声明词 (_KB_NOTES_ASK)
+# 是其超集 (问法可用 注意/提示/取消/amend 等词声明意图)。
+_KB_NOTES_INTENT_FACT = {
+    "policy": re.compile(r"政策|规定|限制|要求|须知|年龄|着装|会员|登记|允许|禁止|只限|仅限"
+                         r"|保留|押金|policy|rules?|restrictions?|requirements?|dress"
+                         r"|age|members|allowed|only|held|deposit", re.I),
+    "booking": re.compile(r"预约|预订|订位|订座|退订|保留|reserv|book|cancel|held", re.I),
+}
+_KB_NOTES_ASK = {
+    "policy": re.compile(r"政策|规定|限制|要求|须知|年龄|着装|会员|登记|允许|禁止|只限|仅限"
+                         r"|保留|押金|注意|提示|policy|rules?|restrictions?|requirements?"
+                         r"|dress|age|members|allowed|only|held|deposit|tips|register", re.I),
+    "booking": re.compile(r"预约|预订|订位|订座|退订|取消|改约|reserv|book|cancel|held"
+                          r"|amend", re.I),
+}
+
+def _kb_notes_intent_gap(stripped, topic):
+    """V30-04 R2 (KB30-04-01): notes 字段 intent 级事实门。问句 (已剥离实体提及)
+    声明的 booking/policy 意图, 在已发布 notes 文本中必须有对应事实标记 — 缺标记时
+    通用 notes 与所问意图无关, 直答即冒充 (如酒店概览 notes 回答预约/着装问题)。
+    首个命中的问法族锚定意图 (booking 优先): 该族事实已发布即直答, 问句尾部的泛化
+    提示词 ("预约要注意什么" 的 注意) 不再对第二族二次开启缺口。
+    返回缺失的 intent 族名 ("booking"/"policy") 或 None。"""
+    notes = str((topic.get("fields") or {}).get("notes") or "")
+    if not notes:
+        return None          # notes 未发布 → _kb_direct_answer 已走缺字段路径
+    for family in ("booking", "policy"):
+        if _KB_NOTES_ASK[family].search(stripped or ""):
+            if _KB_NOTES_INTENT_FACT[family].search(notes):
+                return None          # 锚定族事实已发布 → notes 直答
+            return family
+    return None
+
 _KB_FIELD_PATTERNS = [
     ("directions", ["怎么去", "怎么走", "如何到达", "怎么到达", "路线", "怎么过去", "怎么到",
                     "directions", "how to get", "how do i get", "how can i get", "the way to",
@@ -137,6 +186,88 @@ def _kb_strip_entity(text, topic):
             continue
         out = re.sub(re.escape(n), " ", out, flags=re.I)
     return out
+
+# V30-04 R2 (KB30-04-02): 概述/可用性/任意字段问法的问句脚手架 — 只作子事实覆盖
+# 检查的剔除, 不进路由短称抽取 (_KB_STEM_FILLER 口径不变)。全部是"不命名事物的
+# 问法功能词/泛指参照词"; 命名子服务的名词 (寄养/daycare/托管/瑜伽室…) 不在列,
+# 误列会把未发布子服务洗白成已覆盖。
+_KB_ZH_SCAFFOLD = [
+    "有什么特别的", "有什么亮点", "有什么讲究", "有什么内容", "有什么好处", "有什么",
+    "大概是什么情况", "是什么情况", "的情况", "到底是什么", "给我讲讲", "说说", "讲讲",
+    "值得去", "值得", "是开着的", "还开着", "今天开不开", "开不开", "开不", "现在营业",
+    "现在能用", "现在还能", "还能用", "坏了在修", "是不是停了", "停了", "酒店有", "你们有",
+    "想问", "我想了解下", "了解下", "不好意思问下", "咨询一下", "咨询", "允许", "提供",
+    "好吗", "现在", "今天", "每天", "晚上", "中午", "早上", "开始", "结束", "服务", "地方",
+    "具体", "一层", "位于", "哪个", "方位", "客服", "前台", "座机", "电梯", "大堂",
+    "有事", "联系", "什么", "多谢", "提前", "人数", "使用", "酒店",
+]
+# 单字功能词 (只剩这些字的残段不构成子服务点名; 双字以上实体名不受影响)
+_KB_ZH_FUNCTION_CHARS = set(
+    "的吗呢啊呀吧哦嗯了的把是将让给发找说去来还就都有和跟与及或在从到这那被比"
+    "请帮您我他它她能想要可打进出回上下中边里外办满只远较话一层次个家种")
+_KB_EN_SCAFFOLD = {
+    "here", "available", "open", "closed", "close", "use", "out", "working",
+    "reopened", "about", "like", "special", "worth", "visiting", "include",
+    "included", "exactly", "makes", "any", "good", "expect", "from", "describe",
+    "more", "could", "thanks", "thank", "until", "start", "shut", "morning",
+    "find", "whereabouts", "ground", "show", "best", "make", "advance", "online",
+    "change", "amend", "hard", "directly", "dial", "give", "reach", "per",
+    "visit", "minimum", "for", "need", "who", "contact", "extra", "far",
+    "cancel",
+}
+# 英文固定短语 (整短语剔除, 避免单词口径洗白 "room service" 一类子服务命名:
+# "out of service" 问的是主题自身可用性, 而 "service" 单独残留在 "room service"
+# 中是未发布子服务点名, 不得加入词级脚手架)
+_KB_SUBFACT_PHRASES_EN = ("out of service", "out of order", "room rate", "my room")
+
+def _kb_subfact_uncovered(text, topic, locale):
+    """V30-04 R2 (KB30-04-02): 子事实覆盖检查 (所有字段问法)。问句剥离已命中
+    主题的名称/别名、字段问法词、客套/疑问填充、问句脚手架与单字功能词后,
+    残余内容片段必须仍被该主题已发布文本 (名称/别名/字段值/回答变体,
+    _kb_topic_text) 覆盖 — 未覆盖 = 客人点名了该条目未发布的子服务 (如
+    pet daycare/宠物寄养 命中 Pet Friendly 关键词), 任何字段/概述直答都会把
+    条目已有介绍冒充为该子服务答案。
+    返回未覆盖片段列表 (空 = 覆盖)。确定性纯文本规则, 不依赖路由结果。"""
+    stripped = _kb_strip_entity(text, topic)
+    if locale == "en-US":
+        for ph in _KB_SUBFACT_PHRASES_EN:
+            stripped = stripped.replace(ph, " ")
+        # 英文字段词按词边界整词剔除 — 子串剔除会碎裂更长单词
+        # (booking→ing / whereabouts→abouts) 制造假残片
+        for _, pats in _KB_FIELD_PATTERNS:
+            for p in pats:
+                if p.isascii():
+                    stripped = re.sub(r"\b" + re.escape(p) + r"\b", " ", stripped)
+                elif p in stripped:
+                    stripped = stripped.replace(p, " ")
+    else:
+        for _, pats in _KB_FIELD_PATTERNS:
+            for p in pats:
+                if p in stripped:
+                    stripped = stripped.replace(p, " ")
+    for rex in _KB_FIELD_RES.values():
+        stripped = rex.sub(" ", stripped)   # 英文字段词按词边界剔除
+    for w in _KB_STEM_FILLER:
+        if w in stripped:
+            stripped = stripped.replace(w, " ")
+    blob = _kb_topic_text(topic).lower()
+    uncovered = []
+    if locale == "en-US":
+        for w in re.findall(r"[a-z]{3,}", stripped.lower()):
+            if w in _KB_STEM_EN_STOP or w in _KB_EN_SCAFFOLD:
+                continue
+            if w not in blob:
+                uncovered.append(w)
+    else:
+        for w in _KB_ZH_SCAFFOLD:
+            if w in stripped:
+                stripped = stripped.replace(w, " ")
+        stripped = "".join(ch for ch in stripped
+                           if ch not in _KB_ZH_FUNCTION_CHARS)
+        for seg in re.findall(r'[一-鿿]{2,}', stripped):
+            if seg not in blob:
+                uncovered.append(seg)
+    return uncovered
 
 _KB_STEM_FILLER = [
     "请问一下", "请问", "麻烦", "我想找", "我想", "找一下", "一下", "告诉我", "告诉",
@@ -497,12 +628,24 @@ def route_single_turn(text: str, locale: str, topics: list) -> dict:
     if topic is not None:
         # 比较级问句不走直接模板 (模板无法安全表达比较关系), 交规划器选卡
         if not _KB_COMPARISON_RE.search(text):
-            answer = _kb_direct_answer(topic, field, locale, 0)
+            # V30-04 R2 (KB30-04-01/02) intent 级事实门 (与网关 kb_route 同规则):
+            # notes 问法声明的 booking/policy 意图缺对应事实标记、任意字段/概述
+            # 问法点名未发布子服务时, 不得直答 → KB_MISSING_FIELD (gap 标注缺口族)
+            gap_kind = None
+            if field == "notes":
+                gap_kind = _kb_notes_intent_gap(_kb_strip_entity(text, topic), topic)
+            if gap_kind is None and _kb_subfact_uncovered(text, topic, locale):
+                gap_kind = "subfact"
+            answer = (None if gap_kind else
+                      _kb_direct_answer(topic, field, locale, 0))
             if answer is not None:
                 return {"decision": "KB_DIRECT_FACT" if field else "KB_DIRECT_OVERVIEW",
                         "topic_id": topic["id"], "field": field}
-            return {"decision": "KB_MISSING_FIELD", "topic_id": topic["id"],
-                    "field": field}
+            d = {"decision": "KB_MISSING_FIELD", "topic_id": topic["id"],
+                 "field": field}
+            if gap_kind:
+                d["gap"] = gap_kind
+            return d
         return {"decision": "KB_NPU_PLANNER", "field": field, "reason": "comparison"}
     return {"decision": "KB_NPU_PLANNER", "field": field, "reason": "low_match"}
 
@@ -518,12 +661,9 @@ INTENT_RUNTIME_FIELD = {
 # notes 承载 policy/booking 两类 intent 的事实标记: notes 已发布且其文本含对应
 # 标记, 该 intent 的事实才算存在 — 回答字段内容必须真正承载所问 intent 的事实,
 # 不再"notes 非空同时授权 price/policy/booking 三种事实"。
-NOTES_INTENT_MARKERS = {
-    "policy": re.compile(r"政策|规定|限制|要求|须知|年龄|着装|会员|登记|允许|禁止|只限|仅限"
-                         r"|保留|押金|政策|policy|rules?|restrictions?|requirements?|dress"
-                         r"|age|members|allowed|only|held|deposit", re.I),
-    "booking": re.compile(r"预约|预订|订位|订座|退订|保留|reserv|book|cancel|held", re.I),
-}
+# V30-04 R2 (KB30-04-01): 与网关 _kb_notes_intent_fact 同一正则 (事实可用性与
+# 运行时发布判定统一 — 网关直答门用同一标记判定, 不存在第二套口径)。
+NOTES_INTENT_MARKERS = _KB_NOTES_INTENT_FACT
 
 
 def intent_fact_available(e: dict, lang: str, intent: str) -> bool:
@@ -549,31 +689,33 @@ def intent_fact_available(e: dict, lang: str, intent: str) -> bool:
 
 
 def runtime_field_published(e: dict, lang: str, intent: str) -> bool:
-    """(entry, lang) 的**声明运行时字段**是否已发布 (字段级, 与网关 fields 同口径):
-    time/location/directions/phone → context 对应字段; price → 恒 False (kb-v1 无
-    schema 价格字段); policy/booking → notes 非空 (与 intent 级标记判定无关 —
-    声明字段已发布时网关用该字段回答, 属同条目同字段诚实回答); availability/
-    overview → answers。clarify 断言据此区分"声明字段缺失"(严格安全集)与
-    "intent 标记缺但字段已发布"(允许同条目同字段直答)。"""
-    fld = INTENT_RUNTIME_FIELD[intent]
-    if fld is None:
-        return intent_fact_available(e, lang, intent)
-    if fld == "notes":
-        return bool(str(((e.get("context") or {}).get("notes") or {}).get(lang) or "").strip())
+    """(entry, lang) 的声明运行时字段是否已发布 — V30-04 R2 (KB30-04-01) 与
+    intent_fact_available 统一为同一判定: 事实可用性即运行时发布判定 (policy/
+    booking 需 notes 含对应族标记, 不再"notes 非空即已发布")。保留独立函数仅为
+    生成报告字段命名; 两侧口径漂移在结构上不可能。"""
     return intent_fact_available(e, lang, intent)
 
 
-def route_expectation(binding: str, intent: str, entry_id,
-                      runtime_field_present: bool = False) -> callable:
+# missing_subfact (V30-04 R2, KB30-04-02): 已知条目下点名的未发布子服务
+# (NO_FACT 主题命中条目信号词, 如 pet daycare/宠物寄养 → Pet Friendly) —
+# 允许的运行时结局 = 该条目的缺字段话术 (字段=声明字段) 或安全非独占路径;
+# 任何独占直答 (概述/notes 冒充子服务答案) 都是违规。
+MISSING_SUBFACT_SAFE_DECISIONS = ("KB_CLARIFY", "NOT_KNOWLEDGE", "KB_NPU_PLANNER",
+                                  "KB_SAFE_SCOPE_GAP")
+
+
+def route_expectation(binding: str, intent: str, entry_id) -> callable:
     """生成/校验/评测共用的"声明 ↔ 最终决策"断言器: 返回 fn(decision_dict) -> ok。
-      entry   → 独占直答且字段/主题与声明一致 (availability/overview → 概述直答);
-      clarify → **声明字段缺失时** (runtime_field_present=False) 只允许
-                KB_MISSING_FIELD(字段=声明字段)/有效澄清/安全非独占路径, 任何独占
-                直答 (含本条目概述/其他字段) 都是冒充回答; **声明字段已发布但
-                intent 级事实标记缺** (policy/booking notes 无对应标记) 时, 同条目
-                同声明字段的直答是诚实回答 (回答字段与声明一致, 不借条目不换字段),
-                其余独占直答仍算冒充;
-      no_fact → 只允许安全兜底 (错候选澄清不算)。"""
+      entry           → 独占直答且字段/主题与声明一致 (availability/overview →
+                        概述直答);
+      clarify         → 只允许 KB_MISSING_FIELD(字段=声明字段, 主题=声明条目)/
+                        有效澄清/安全非独占路径; **任何独占直答都是冒充回答**
+                        (V30-04 R2: 废除"声明字段已发布时允许同条目同字段直答"
+                        例外 — 缺 intent 对应事实时通用 notes 不构成该 intent
+                        的答案, 网关 intent 级事实门与本校验同规则);
+      missing_subfact → 已知条目下未发布子服务: KB_MISSING_FIELD(字段=声明字段,
+                        主题=碰撞条目) 或安全非独占路径, 零独占直答;
+      no_fact         → 只允许安全兜底 (错候选澄清不算)。"""
     fld = INTENT_RUNTIME_FIELD[intent]
 
     def _fn(d: dict) -> bool:
@@ -584,12 +726,16 @@ def route_expectation(binding: str, intent: str, entry_id,
                     and d.get("field") == fld)
         if binding == "clarify":
             if dec in FACT_LEAK_DECISIONS:
-                return (runtime_field_present and dec == "KB_DIRECT_FACT"
-                        and d.get("topic_id") == str(entry_id)
-                        and d.get("field") == fld)
-            if dec == "KB_MISSING_FIELD" and d.get("field") != fld:
                 return False
+            if dec == "KB_MISSING_FIELD":
+                return (d.get("field") == fld and d.get("topic_id") == str(entry_id))
             return dec in CLARIFY_SAFE_DECISIONS
+        if binding == "missing_subfact":
+            if dec in FACT_LEAK_DECISIONS:
+                return False
+            if dec == "KB_MISSING_FIELD":
+                return (d.get("field") == fld and d.get("topic_id") == str(entry_id))
+            return dec in MISSING_SUBFACT_SAFE_DECISIONS
         return dec in SAFE_FALLBACK_DECISIONS
 
     return _fn

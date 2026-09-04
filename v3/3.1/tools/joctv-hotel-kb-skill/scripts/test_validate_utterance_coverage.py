@@ -18,6 +18,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import validate_utterance_coverage as v  # noqa: E402
+import kb_router_chain as kbc  # noqa: E402
+
+
+def load_tpl() -> dict:
+    return json.loads((SCRIPT_DIR.parent / "templates"
+                       / "utterance_intent_templates.json").read_text(encoding="utf-8"))
 
 
 def make_pkg() -> dict:
@@ -87,15 +93,15 @@ def utt(i, lang, text, binding="entry", entry_id=1, category="玩", intent="time
 def make_corpus(pkg_sha: str) -> dict:
     return {
         "schema_version": "joctv-hotel-utterance-v1",
-        "skill_version": "1.3.0",
+        "skill_version": "1.4.0",
         "hotel_id": "t1",
         "source_package_name": pkg_name(),
         "source_package_sha256": pkg_sha,
         "seed": 20260904,
         "variant_terms": {"1": {"zh": ["健身中心"], "en": ["workout room"]},
                           "2": {"zh": [], "en": []}},
-        "counts": {"total": 5, "zh": 3, "en": 2, "entry_bound": 2,
-                   "clarify": 2, "no_fact": 1},
+        "counts": {"total": 6, "zh": 4, "en": 2, "entry_bound": 2,
+                   "clarify": 2, "missing_subfact": 1, "no_fact": 1},
         "utterances": [
             utt(1, "zh", "健身房几点开门"),
             # 健身房未发布 directions 事实 → 问"怎么走"属 clarify (缺事实兜底路径)
@@ -106,6 +112,11 @@ def make_corpus(pkg_sha: str) -> dict:
                 category=None, intent="price", field="price"),
             utt(5, "en", "how do i get to workout room", binding="clarify",
                 term_kind="variant", intent="directions", field="directions"),
+            # 关键词碰撞主题 (1.4.0, KB30-04-02): "健身房瑜伽室" 含条目1信号词 健身房,
+            # 但点名的是条目未覆盖的子服务 → missing_subfact 绑定 (不删除),
+            # 运行时须走缺字段话术 (gap=booking: notes 无预约标记)
+            utt(6, "zh", "健身房瑜伽室怎么预约", binding="missing_subfact", category=None,
+                intent="booking", field="notes"),
         ],
     }
 
@@ -349,8 +360,9 @@ class FactMappingTests(unittest.TestCase):
         self.assertIn("E_INTENT_FACT", codes(run_validate(self, c)))
 
     def test_booking_clarify_legal_when_marker_missing(self):
-        # 同一问法挂 clarify 合法: intent 级 booking 事实未发布 (标记缺),
-        # 声明字段 notes 已发布 → 允许同条目同字段诚实直答 (不冒充其他字段)
+        # 同一问法挂 clarify 合法 (1.4.0 口径): intent 级 booking 事实未发布 (notes
+        # 无预约标记) → 网关 intent 事实门命中 → KB_MISSING_FIELD(field=notes,
+        # topic=1, gap=booking), 是 clarify 允许的安全结局; 任何独占直答都是冒充
         c = make_corpus("x")
         c["utterances"][0]["text"] = "健身房怎么预约"
         c["utterances"][0]["binding"] = "clarify"
@@ -362,6 +374,169 @@ class FactMappingTests(unittest.TestCase):
         self.assertNotIn("E_INTENT_FACT", got)
         self.assertNotIn("E_CLARIFY_FACT", got)
         self.assertNotIn("E_ROUTE_CONSISTENCY", got)
+
+
+class MissingSubfactTests(unittest.TestCase):
+    """missing_subfact 绑定 (1.4.0, KB30-04-02): 关键词碰撞主题不删除 —
+    建模为已知条目下的缺失子事实挑战, 中段必须是碰撞条目信号词扩展出的
+    未发布子服务称呼; 路由只允许缺字段话术或安全非独占路径。"""
+
+    def test_valid_missing_subfact_passes(self):
+        # make_corpus 默认第 6 条 (健身房教练怎么预约) 即合法样本
+        self.assertEqual(run_validate(self, make_corpus("x")), [])
+
+    def test_pure_signal_mid_rejected(self):
+        # 中段恰是条目信号词本身 = 已发布主题, 不是缺失子事实挑战
+        c = make_corpus("x")
+        c["utterances"][5]["text"] = "健身房怎么预约"
+        got = codes(run_validate(self, c))
+        self.assertIn("E_SUBFACT_SOURCE", got)
+
+    def test_mid_without_entry_signal_rejected(self):
+        # 中段不含碰撞条目任何信号词 → 路由不会命中该条目, 绑定不可追溯
+        c = make_corpus("x")
+        c["utterances"][5]["text"] = "瑜伽私教课怎么预约"
+        self.assertIn("E_SUBFACT_SOURCE", codes(run_validate(self, c)))
+
+    def test_category_must_be_null(self):
+        c = make_corpus("x")
+        c["utterances"][5]["category"] = "玩"
+        self.assertIn("E_SUBFACT_SHAPE", codes(run_validate(self, c)))
+
+    def test_entry_must_exist(self):
+        c = make_corpus("x")
+        c["utterances"][5]["entry_id"] = 9
+        self.assertIn("E_ENTRY_REF", codes(run_validate(self, c)))
+
+    def test_missing_subfact_count_recomputed(self):
+        c = make_corpus("x")
+        c["counts"]["missing_subfact"] = 0
+        self.assertIn("E_COUNT_MISMATCH", codes(run_validate(self, c)))
+
+
+class RouteExpectationTighteningTests(unittest.TestCase):
+    """V30-04 R2 (KB30-04-01): 废除 clarify "声明字段已发布允许直答"例外 —
+    事实可用性与运行时发布判定统一后, 任何独占直答都是冒充回答。"""
+
+    def test_clarify_direct_fact_now_violation(self):
+        fn = kbc.route_expectation("clarify", "time", 1)
+        self.assertFalse(fn({"decision": "KB_DIRECT_FACT", "topic_id": "1",
+                             "field": "time"}))
+
+    def test_clarify_direct_overview_now_violation(self):
+        fn = kbc.route_expectation("clarify", "time", 1)
+        self.assertFalse(fn({"decision": "KB_DIRECT_OVERVIEW", "topic_id": "1",
+                             "field": None}))
+
+    def test_clarify_missing_field_on_declared_field_ok(self):
+        fn = kbc.route_expectation("clarify", "time", 1)
+        self.assertTrue(fn({"decision": "KB_MISSING_FIELD", "topic_id": "1",
+                            "field": "time"}))
+
+    def test_missing_subfact_expectations(self):
+        fn = kbc.route_expectation("missing_subfact", "booking", 1)
+        self.assertFalse(fn({"decision": "KB_DIRECT_FACT", "topic_id": "1",
+                             "field": "notes"}))
+        self.assertFalse(fn({"decision": "KB_DIRECT_OVERVIEW", "topic_id": "1",
+                             "field": None}))
+        self.assertTrue(fn({"decision": "KB_MISSING_FIELD", "topic_id": "1",
+                            "field": "notes"}))
+        self.assertTrue(fn({"decision": "KB_NPU_PLANNER"}))
+        self.assertTrue(fn({"decision": "KB_CLARIFY",
+                            "candidates": ["1", "2"]}))
+
+    def test_runtime_field_published_unified(self):
+        # 1.4.0: runtime_field_published ≡ intent_fact_available (统一口径,
+        # notes 非空不再授权 booking/policy)
+        pkg = make_pkg()
+        for lang in ("zh", "en"):
+            self.assertEqual(kbc.runtime_field_published(pkg["entries"][0], lang, "booking"),
+                             kbc.intent_fact_available(pkg["entries"][0], lang, "booking"))
+            self.assertFalse(kbc.runtime_field_published(pkg["entries"][0], lang, "booking"))
+            self.assertTrue(kbc.runtime_field_published(pkg["entries"][0], lang, "policy"))
+
+
+class RouterGateTests(unittest.TestCase):
+    """网关路由链 intent 级事实门 + 子事实覆盖检查 (V30-04 R2, KB30-04-01/02):
+    route_single_turn 对缺意图事实问法/点名未发布子服务问法必须走缺字段话术。"""
+
+    def setUp(self):
+        pkg = make_pkg()
+        corpus = {"variant_terms": {"1": {"zh": ["健身中心"], "en": ["workout room"]},
+                                    "2": {"zh": [], "en": []}}}
+        topics = kbc.build_topics(pkg, corpus, enhanced=True, tpl=load_tpl())
+        self.zh = [t for t in topics if t["locale"] == "zh-CN"]
+        self.en = [t for t in topics if t["locale"] == "en-US"]
+
+    def test_booking_gap_on_markerless_notes(self):
+        d = kbc.route_single_turn("健身房怎么预约", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_MISSING_FIELD")
+        self.assertEqual(d["field"], "notes")
+        self.assertEqual(d["topic_id"], "1")
+        self.assertEqual(d.get("gap"), "booking")
+
+    def test_policy_marker_still_direct_answers(self):
+        d = kbc.route_single_turn("健身房有什么规定", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_DIRECT_FACT")
+        self.assertEqual(d["field"], "notes")
+
+    def test_en_booking_gap(self):
+        d = kbc.route_single_turn("how do i book the fitness center", "en-US", self.en)
+        self.assertEqual(d["decision"], "KB_MISSING_FIELD")
+        self.assertEqual(d.get("gap"), "booking")
+
+    def test_unpublished_subfact_overview_gated(self):
+        d = kbc.route_single_turn("健身房瑜伽室怎么样", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_MISSING_FIELD")
+        self.assertEqual(d.get("gap"), "subfact")
+
+    def test_unpublished_subfact_field_question_gated(self):
+        # 字段问法同样点名未发布子服务 (瑜伽室几点开门) → 不得用健身房时间直答
+        d = kbc.route_single_turn("健身房瑜伽室几点开门", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_MISSING_FIELD")
+        self.assertEqual(d.get("gap"), "subfact")
+
+    def test_covered_overview_still_direct(self):
+        d = kbc.route_single_turn("健身房怎么样", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_DIRECT_OVERVIEW")
+
+    def test_availability_scaffold_words_do_not_trip_subfact(self):
+        # 问句脚手架词 (开不开/还开着/提供…) 不命名子服务, 不得误触发覆盖门
+        for text in ("健身房是开着的吗", "健身房还开着吗", "健身房提供吗", "酒店有健身房吗"):
+            d = kbc.route_single_turn(text, "zh-CN", self.zh)
+            self.assertEqual(d["decision"], "KB_DIRECT_OVERVIEW", text)
+
+    def test_notes_intent_gap_requires_ask_word(self):
+        # 无 booking/policy 问法声明的 notes 问法不触发 intent 门 (正常 notes 直答)
+        d = kbc.route_single_turn("健身房有什么特色", "zh-CN", self.zh)
+        self.assertEqual(d["decision"], "KB_DIRECT_FACT")
+        self.assertEqual(d["field"], "notes")
+
+
+class TemplateReclassificationTests(unittest.TestCase):
+    """V3 模板 (Skill 1.4.0): 预约类问法从 policy 移入 booking intent —
+    问的是预约事务, 留在 policy 会使 policy-marker-only notes 的条目对
+    预约问法产生错位绑定。"""
+
+    def setUp(self):
+        self.tpl = load_tpl()
+
+    def test_version_bumped(self):
+        self.assertEqual(self.tpl["version"], 3)
+
+    def test_booking_asking_templates_moved(self):
+        for t in ("{t}需要预约吗", "{t}可以预订吗", "{t}要不要提前预约"):
+            self.assertIn(t, self.tpl["intents"]["booking"]["zh"]["N"])
+            self.assertNotIn(t, self.tpl["intents"]["policy"]["zh"]["N"])
+        for t in ("does {t} need a reservation", "can i book {t} in advance"):
+            self.assertIn(t, self.tpl["intents"]["booking"]["en"]["N"])
+            self.assertNotIn(t, self.tpl["intents"]["policy"]["en"]["N"])
+
+    def test_policy_templates_keep_policy_semantics(self):
+        for t in ("{t}有什么规定", "{t}有着装要求吗"):
+            self.assertIn(t, self.tpl["intents"]["policy"]["zh"]["N"])
+        for t in ("is there a dress code for {t}", "what are the rules for {t}"):
+            self.assertIn(t, self.tpl["intents"]["policy"]["en"]["N"])
 
 
 class RouteConsistencyTests(unittest.TestCase):
@@ -441,7 +616,7 @@ class SchemaContractTests(unittest.TestCase):
     def test_binding_enum_matches_validator_acceptance(self):
         item = self.schema["properties"]["utterances"]["items"]
         self.assertEqual(set(item["properties"]["binding"]["enum"]),
-                         {"entry", "clarify", "no_fact"})
+                         {"entry", "clarify", "missing_subfact", "no_fact"})
 
     def test_intent_enum_matches_validator_field_map(self):
         item = self.schema["properties"]["utterances"]["items"]

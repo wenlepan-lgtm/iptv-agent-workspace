@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""JOCTV 酒店问法覆盖生成器 (Skill 1.3.0)。
+"""JOCTV 酒店问法覆盖生成器 (Skill 1.4.0)。
 
 从已发布知识包 (joctv-hotel-kb-v1) + 通用酒店意图模板生成双语问法语料:
   - 每条问法绑定 language/intent/field/entry (可追溯) 或明确 NO_FACT;
@@ -7,6 +7,11 @@
     — price 恒为缺字段 (kb-v1 无结构化价格字段); policy/booking 需 notes 已发布且
     含对应事实标记 (规定/着装/年龄… vs 预约/预订/退订…), 不再"notes 非空同时授权
     三种事实"; 只有 intent 事实已发布的组合生成 binding=entry;
+  - missing_subfact 绑定 (1.4.0, KB30-04-02): 命中已知条目信号词的 NO_FACT 主题
+    (关键词碰撞, 如 宠物寄养/pet daycare 命中 Pet Friendly) **不删除** — 建模为该
+    条目下的缺失子事实挑战样本 (binding=missing_subfact, entry_id=碰撞条目),
+    路由断言要求 KB_MISSING_FIELD (字段=声明字段, 主题=碰撞条目) 或安全非独占
+    路径, 零独占直答;
   - 最终路由硬断言 (1.3.0, KB30-04-02): 每条**发出**的问法用网关 kb_route 确定性
     单轮链副本 (kb_router_chain.route_single_turn) 对增强别名发布态 topics 断言
     最终 decision + 回答字段与声明一致 (entry 精确独占直答; clarify 声明字段缺失时
@@ -35,8 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kb_router_chain import (INTENT_RUNTIME_FIELD, _KB_COMPARISON_RE,  # noqa: E402
                              build_topics, intent_fact_available,
-                             route_expectation, route_single_turn,
-                             runtime_field_published)
+                             route_expectation, route_single_turn)
 
 CJK_RE = re.compile(r'[一-鿿]')
 LATIN_RE = re.compile(r'[a-zA-Z]')
@@ -213,7 +217,9 @@ def build_variant_terms(pkg: dict, tpl: dict, signals: dict, raws: dict) -> tupl
 
 
 def filter_no_fact_topics(topics: list, lang: str, pkg: dict, raws: dict) -> tuple:
-    """NO_FACT 主题不得包含任何条目独占信号词 (全量-泛指, 子串即拒)。"""
+    """NO_FACT 主题分类 (V30-04 R2, KB30-04-02): 主题含某条目独占信号词 (全量-泛指,
+    子串即命中) 时**不删除** — 返回为关键词碰撞主题 (entry_id 记碰撞条目), 由调用方
+    建模为该条目下的缺失子事实挑战 (missing_subfact 绑定); 无碰撞主题保持 no_fact。"""
     kept, rejected = [], []
     for topic in topics:
         t = topic.lower() if lang == "en" else topic
@@ -221,12 +227,13 @@ def filter_no_fact_topics(topics: list, lang: str, pkg: dict, raws: dict) -> tup
         for eid, per in raws.items():
             for f in per[lang]:
                 if f in t:
-                    bad = f"contains_signal_of_entry_{eid}:{f}"
+                    bad = (f"contains_signal_of_entry_{eid}:{f}", eid, f)
                     break
             if bad:
                 break
         if bad:
-            rejected.append({"topic": topic, "lang": lang, "reason": bad})
+            rejected.append({"topic": topic, "lang": lang, "reason": bad[0],
+                             "entry_id": bad[1], "signal": bad[2]})
         else:
             kept.append(topic)
     return kept, rejected
@@ -302,7 +309,7 @@ def main() -> int:
                         for loc in ("zh-CN", "en-US")}
     # 硬断言账本: 违规收集后统一 FAIL (不做安全过滤/跳过 — 无自证循环)
     route_violations = []
-    route_asserted = {"entry": 0, "clarify": 0, "no_fact": 0}
+    route_asserted = {"entry": 0, "clarify": 0, "missing_subfact": 0, "no_fact": 0}
 
     used_norms = set()
     stripped_norms = set()   # 去尾部语气词后的归一 — 同义语气变体只留一条
@@ -322,8 +329,7 @@ def main() -> int:
                 return True
         return False
 
-    def emit(lang, text, binding, entry_id, category, intent, term_kind,
-             runtime_field_present=False):
+    def emit(lang, text, binding, entry_id, category, intent, term_kind):
         nonlocal dup_dropped, near_dropped
         n = norm(lang, text)
         if not n or n in used_norms:
@@ -344,8 +350,7 @@ def main() -> int:
         # 最终路由硬断言 (KB30-04-01/02): 发出的每条问法在网关确定性单轮链下,
         # 最终 decision + 回答字段必须与声明一致; 违规收集, 生成结束统一 FAIL
         d = route_single_turn(text, LOCALE[lang], topics_by_locale[LOCALE[lang]])
-        ok = route_expectation(binding, intent, entry_id,
-                               runtime_field_present=runtime_field_present)(d)
+        ok = route_expectation(binding, intent, entry_id)(d)
         if not ok:
             route_violations.append({"lang": lang, "text": text, "binding": binding,
                                      "entry_id": entry_id, "intent": intent,
@@ -385,7 +390,6 @@ def main() -> int:
                 # 未发布 (字段缺 / policy、booking 标记缺) → clarify 问法
                 fact_present = intent_fact_available(e, lang, intent)
                 binding = "entry" if fact_present else "clarify"
-                fld_present = runtime_field_published(e, lang, intent)
                 want = args.per_cell if fact_present else args.clarify_per_cell
                 # 组合 = 前缀×句式×称呼; 后缀不进组合空间 — 每个组合随机抽一个后缀,
                 # 避免"仅换语气词(呀/啊/呢)的近似句"凑数 (failure_policy 红线)
@@ -439,12 +443,18 @@ def main() -> int:
                         if s:
                             head = head + " " + s
                         text = head.strip()
-                    if emit(lang, text, binding, eid, e["category"], intent, kind,
-                            runtime_field_present=fld_present):
+                    if emit(lang, text, binding, eid, e["category"], intent, kind):
                         got += 1
 
+    # NO_FACT 挑战语料: 无碰撞主题 → no_fact 绑定 (安全兜底断言);
+    # 关键词碰撞主题 (V30-04 R2, KB30-04-02) → missing_subfact 绑定 — 不删除,
+    # 建模为碰撞条目下的缺失子事实, 断言 KB_MISSING_FIELD(字段=声明字段,
+    # 主题=碰撞条目) 或安全非独占路径, 零独占直答
     for lang in ("zh", "en"):
-        for topic in nf_topics[lang]:
+        cells = ([(topic, "no_fact", None) for topic in nf_topics[lang]]
+                 + [(r["topic"], "missing_subfact", r["entry_id"])
+                    for r in nf_rejected if r["lang"] == lang])
+        for topic, binding, colliding_eid in cells:
             if lang == "en":
                 topic = topic.lower()
             for intent in tpl["no_fact_intents"]:
@@ -471,7 +481,7 @@ def main() -> int:
                     else:
                         head = p + body
                         text = (head + " " + s if s else head).strip()
-                    if emit(lang, text, "no_fact", None, None, intent, "base"):
+                    if emit(lang, text, binding, colliding_eid, None, intent, "base"):
                         got += 1
 
     if route_violations:
@@ -504,12 +514,14 @@ def main() -> int:
         "en": sum(1 for u in utterances if u["lang"] == "en"),
         "entry_bound": sum(1 for u in utterances if u["binding"] == "entry"),
         "clarify": sum(1 for u in utterances if u["binding"] == "clarify"),
+        "missing_subfact": sum(1 for u in utterances
+                               if u["binding"] == "missing_subfact"),
         "no_fact": sum(1 for u in utterances if u["binding"] == "no_fact"),
     }
     pkg_sha = hashlib.sha256(pkg_path.read_bytes()).hexdigest()
     corpus = {
         "schema_version": "joctv-hotel-utterance-v1",
-        "skill_version": "1.3.0",
+        "skill_version": "1.4.0",
         "hotel_id": pkg["hotel_id"],
         "source_package_name": pkg["package_name"],
         "source_package_sha256": pkg_sha,
@@ -541,11 +553,9 @@ def main() -> int:
             n_var = sum(1 for u in utterances if u["entry_id"] == e["id"]
                         and u["lang"] == lang and u["term_kind"] == "variant")
             avail = [i for i in tpl["intents"] if intent_fact_available(e, lang, i)]
-            fld_pub = {i: runtime_field_published(e, lang, i) for i in tpl["intents"]}
             per_entry.append({"entry_id": e["id"], "lang": lang,
                               "base": n_base, "variant": n_var,
                               "fact_available_intents": avail,
-                              "runtime_field_published": fld_pub,
                               "variants": variants[e["id"]][lang]})
     report = {
         "seed": args.seed,

@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "JOCTV 酒店问法覆盖生成资源: 通用酒店意图本体(9 intents × 字段映射) + 中英自然句式模板 + 同义称呼词典(variant_lexicon, 增强别名的唯一来源) + NO_FACT 主题。所有内容为通用酒店域表达, 不含任何酒店事实; 事实只来自输入知识包。V2 (Skill 1.3.0): intent_fields.price 独立为 price 字段(kb-v1 无结构化价格字段, 价格问法一律缺字段安全兜底); 句式模板按'所声明 intent 必须触发网关对应运行时字段'口径修剪(字段冲突/无字段词句式已删除, 详见 SKILL.md 7.2)。",
+  "version": 3,
+  "description": "JOCTV 酒店问法覆盖生成资源: 通用酒店意图本体(9 intents × 字段映射) + 中英自然句式模板 + 同义称呼词典(variant_lexicon, 增强别名的唯一来源) + NO_FACT 主题。所有内容为通用酒店域表达, 不含任何酒店事实; 事实只来自输入知识包。V2 (Skill 1.3.0): intent_fields.price 独立为 price 字段(kb-v1 无结构化价格字段, 价格问法一律缺字段安全兜底); 句式模板按'所声明 intent 必须触发网关对应运行时字段'口径修剪(字段冲突/无字段词句式已删除, 详见 SKILL.md 7.2)。V3 (Skill 1.4.0): 预约类问法('{t}需要预约吗'/'does {t} need a reservation' 等)从 policy 移入 booking intent — 其问的是预约事务, 留在 policy 会使 policy-marker-only notes 的条目对预约问法产生错位绑定; policy/booking 事实标记口径见 kb_router_chain._KB_NOTES_INTENT_FACT。",
   "intent_fields": {
     "time": "time",
     "location": "location",
@@ -760,9 +760,6 @@
           "{t}有什么规定",
           "{t}有什么限制",
           "{t}有年龄限制吗",
-          "{t}需要预约吗",
-          "{t}可以预订吗",
-          "{t}要不要提前预约",
           "{t}有人数限制吗",
           "{t}有着装要求吗",
           "{t}有使用须知吗",
@@ -774,14 +771,11 @@
         ],
         "V": [
           "{v}有什么规定",
-          "{v}要预约吗",
           "{v}有什么要求"
         ]
       },
       "en": {
         "N": [
-          "does {t} need a reservation",
-          "can i book {t} in advance",
           "does {t} have any restrictions",
           "is there a dress code for {t}",
           "does {t} have an age limit",
@@ -803,11 +797,15 @@
           "帮我预约{t}",
           "{t}预约满了怎么办",
           "{t}怎么改预约",
-          "{t}预约要注意什么"
+          "{t}预约要注意什么",
+          "{t}需要预约吗",
+          "{t}可以预订吗",
+          "{t}要不要提前预约"
         ],
         "V": [
           "想{v}怎么预约",
-          "{v}怎么取消"
+          "{v}怎么取消",
+          "{v}要预约吗"
         ]
       },
       "en": {
@@ -821,7 +819,9 @@
           "can i book {t} for today",
           "who should i ask to book {t}",
           "how do i amend my booking for {t}",
-          "is it hard to book {t}"
+          "is it hard to book {t}",
+          "does {t} need a reservation",
+          "can i book {t} in advance"
         ]
       }
     },

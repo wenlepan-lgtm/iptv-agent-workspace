@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""JOCTV 问法覆盖语料 (joctv-hotel-utterance-v1) 确定性校验器 (Skill 1.3.0)。
+"""JOCTV 问法覆盖语料 (joctv-hotel-utterance-v1) 确定性校验器 (Skill 1.4.0)。
 
 用法:
     python3 validate_utterance_coverage.py --package <kb.json> --corpus <utterances_v1.json> \
@@ -15,8 +15,11 @@
   前后缀结构性派生); **最终路由一致性 (1.3.0, E_ROUTE_CONSISTENCY: 每条问法用
   kb_router_chain.route_single_turn 对增强别名发布态 topics 断言最终 decision + 回答
   字段与声明一致 — entry 精确独占直答; clarify 声明字段缺失时只允许缺字段话术/有效
-  澄清/安全非独占路径; no_fact 只允许安全兜底)**; NO_FACT 纯净 (entry_id/category
-  为空, text 不含任何条目信号词子串); 事实边界 (问法不携带 HH:MM/长数字/货币/楼层
+  澄清/安全非独占路径; no_fact 只允许安全兜底; missing_subfact 只允许缺字段话术
+  (字段=声明字段, 主题=碰撞条目) 或安全非独占路径, 零独占直答)**; NO_FACT 纯净
+  (entry_id/category 为空, text 不含任何条目信号词子串); missing_subfact 绑定
+  (1.4.0, KB30-04-02: 关键词碰撞主题不删除 — 声明碰撞条目, 中段必须是碰撞条目信号词
+  扩展出的未发布子服务称呼); 事实边界 (问法不携带 HH:MM/长数字/货币/楼层
   事实值); variant_terms 元数据独占性复核; 数量门槛。
 任何 FAIL 输出退出码 1; 全部通过输出 OK 摘要并退出码 0。
 """
@@ -32,14 +35,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kb_router_chain import (INTENT_RUNTIME_FIELD, build_topics,  # noqa: E402
                              intent_fact_available, route_expectation,
-                             route_single_turn, runtime_field_published)
+                             route_single_turn)
 
 SCHEMA_VERSION = "joctv-hotel-utterance-v1"
 ROOT_KEYS = ["schema_version", "skill_version", "hotel_id", "source_package_name",
              "source_package_sha256", "seed", "variant_terms", "counts", "utterances"]
 UTT_KEYS = ["id", "lang", "text", "binding", "entry_id", "category", "intent",
             "field", "term_kind"]
-COUNT_KEYS = ["total", "zh", "en", "entry_bound", "clarify", "no_fact"]
+COUNT_KEYS = ["total", "zh", "en", "entry_bound", "clarify", "missing_subfact",
+              "no_fact"]
 DEFAULT_TEMPLATES = Path(__file__).resolve().parent.parent / "templates" \
     / "utterance_intent_templates.json"
 INTENT_FIELD = {i: (f or "overview") for i, f in INTENT_RUNTIME_FIELD.items()}
@@ -116,6 +120,29 @@ def derivable(text: str, lang: str, intent: str, shapes: dict, tpl: dict,
                 elif mid in want:
                     return True
     return False
+
+
+def derive_mids(text: str, lang: str, intent: str, shapes: dict, tpl: dict) -> list:
+    """text 可派生自该 intent 模板时的全部中段 (称呼/主题词) 候选 —
+    missing_subfact 绑定用它核对中段与碰撞条目信号词的确定性关系。"""
+    mids = []
+    for p in tpl["prefixes"][lang]:
+        if p and not text.startswith(p):
+            continue
+        rest = text[len(p):]
+        for s in tpl["suffixes"][lang]:
+            if s and not rest.endswith(s):
+                continue
+            body = rest[:len(rest) - len(s)] if s else rest
+            body = body.strip()
+            for slot, pre, suf in shapes.get((intent, lang), []):
+                if not (body.startswith(pre) and body.endswith(suf)):
+                    continue
+                mid = body[len(pre):len(body) - len(suf)] if suf else \
+                    body[len(pre):]
+                if len(mid) >= 2:
+                    mids.append(mid)
+    return mids
 
 
 class Issue:
@@ -275,10 +302,12 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                 err("E_FACT_LEAK", p, f"问法携带事实值 ({label})")
 
         # ── intent 语义匹配: text 必须可由所声明 intent 的模板结构性派生 ──
-        eid_ref = u["entry_id"] if u["binding"] in ("entry", "clarify") else None
+        eid_ref = (u["entry_id"]
+                   if u["binding"] in ("entry", "clarify", "missing_subfact")
+                   else None)
         ref_ok = isinstance(eid_ref, int) and eid_ref in entries
         term_sets = None
-        if ref_ok:
+        if ref_ok and u["binding"] in ("entry", "clarify"):
             base_terms = [entries[eid_ref]["topic"][lang]] \
                 + list(entries[eid_ref]["keywords"][lang])
             var_terms = [str(x) for x in (corpus["variant_terms"]
@@ -310,10 +339,7 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
 
         # ── 最终路由一致性 (1.3.0): 网关确定性单轮链下 decision+回答字段与声明一致 ──
         d = route_single_turn(text, LOCALE[lang], topics_by_locale[LOCALE[lang]])
-        fld_present = (runtime_field_published(entries[eid_ref], lang, u["intent"])
-                       if ref_ok else False)
-        if not route_expectation(u["binding"], u["intent"], eid_ref,
-                                 runtime_field_present=fld_present)(d):
+        if not route_expectation(u["binding"], u["intent"], eid_ref)(d):
             err("E_ROUTE_CONSISTENCY", p,
                 f"最终路由与声明不符: binding={u['binding']!r} "
                 f"intent={u['intent']!r} field={u['field']!r} → {d}")
@@ -363,6 +389,29 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
                     err("E_FOREIGN_SIGNAL", p,
                         f"含其他条目 {oid} 信号词 {w!r} 且未被本条目信号词覆盖")
                     break
+        elif binding == "missing_subfact":
+            eid = u["entry_id"]
+            if not isinstance(eid, int) or eid not in entries:
+                err("E_ENTRY_REF", p, f"绑定碰撞条目不存在: {eid!r}")
+                continue
+            if u["category"] is not None:
+                err("E_SUBFACT_SHAPE", p, "missing_subfact 必须 category=null")
+            # 碰撞可追溯 + 未发布性 (确定性, KB30-04-02): 中段 (主题词) 必须含碰撞
+            # 条目某信号词 (路由命中原因) 且本身不是该条目任何信号词 (点名的是条目
+            # 未覆盖的子服务 — 纯信号词组合是已发布主题, 不构成缺失子事实挑战)
+            own = sig[(eid, lang)]
+            own_cmp = [w.lower() for w in own] if lang == "en" else own
+            mids = derive_mids(text, lang, u["intent"], shapes, tpl)
+            ok_src = False
+            for m in mids:
+                ml = m.lower() if lang == "en" else m
+                if any(w in ml for w in own_cmp) and ml not in own_cmp:
+                    ok_src = True
+                    break
+            if not ok_src:
+                err("E_SUBFACT_SOURCE", p,
+                    "中段不是碰撞条目信号词扩展出的未发布子服务称呼 "
+                    f"(mids={mids[:3]!r}, 条目 {eid} {lang} 信号词不符)")
         elif binding == "no_fact":
             if u["entry_id"] is not None or u["category"] is not None:
                 err("E_NO_FACT_SHAPE", p, "no_fact 必须 entry_id=null 且 category=null")
@@ -416,6 +465,8 @@ def validate(pkg_path: Path, corpus: dict, min_unique: int,
             "en": sum(1 for u in utts if u["lang"] == "en"),
             "entry_bound": sum(1 for u in utts if u["binding"] == "entry"),
             "clarify": sum(1 for u in utts if u["binding"] == "clarify"),
+            "missing_subfact": sum(1 for u in utts
+                                   if u["binding"] == "missing_subfact"),
             "no_fact": sum(1 for u in utts if u["binding"] == "no_fact"),
         }
         for k, v in real.items():
@@ -449,7 +500,8 @@ def main() -> int:
     n = corpus["counts"]
     print(f"OK 唯一问法 {n['total']} (zh={n['zh']} en={n['en']} "
           f"entry_bound={n['entry_bound']} clarify={n['clarify']} "
-          f"no_fact={n['no_fact']}), 门槛 {args.min_unique} 达标; "
+          f"missing_subfact={n['missing_subfact']} no_fact={n['no_fact']}), "
+          f"门槛 {args.min_unique} 达标; "
           f"去重/近似冲突/串扰/事实边界/intent级事实映射/intent语义/最终路由一致性 全部通过")
     return 0
 
